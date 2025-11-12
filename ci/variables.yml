@@ -29,8 +29,11 @@ variables:
   # Директория с дистрибутивами на runner (shell executor)
   DISTRIBS_DIR: "/distribs"
 
-  # Рабочая директория на runner для сгенерированных конфигов
-  RUNNER_WORKDIR: "${CI_PROJECT_DIR}/generated_configs"
+  # Имя архива с подготовленной структурой Corax
+  CORAX_ARCHIVE: "corax_prepare.zip"
+
+  # Рабочая директория на runner для распакованной структуры
+  RUNNER_WORKDIR: "${CI_PROJECT_DIR}/corax_prepare"
 
   # === Ansible настройки ===
 

@@ -72,14 +72,14 @@ sudo cat /etc/gitlab-runner/config.toml
 ```bash
 # Для Debian/Ubuntu
 sudo apt-get update
-sudo apt-get install -y python3 python3-pip jq openssh-client
+sudo apt-get install -y python3 python3-pip jq openssh-client rsync unzip tree
 
-# Для RHEL/CentOS/ALT Linux
-sudo yum install -y python3 python3-pip jq openssh-clients
+# Для RHEL/CentOS
+sudo yum install -y python3 python3-pip jq openssh-clients rsync unzip tree
 
-# Или для ALT Linux через apt-get
+# Для ALT Linux через apt-get
 sudo apt-get update
-sudo apt-get install -y python3 python3-module-pip jq openssh-clients
+sudo apt-get install -y python3 python3-module-pip jq openssh-clients rsync unzip tree
 ```
 
 Проверка установленных утилит:
@@ -89,15 +89,18 @@ python3 --version  # Python 3.x
 jq --version       # jq-1.x
 ssh -V             # OpenSSH_x.x
 scp -V             # OpenSSH_x.x
+rsync --version    # rsync version 3.x
+unzip -v           # UnZip 6.x
+tree --version     # tree v1.x (опционально для красивого вывода)
 ```
 
 ---
 
-## Подготовка дистрибутивов на Runner
+## Подготовка архива Corax на Runner
 
-### Создание директории для дистрибутивов
+### Создание директории для архива
 
-На машине с GitLab Runner создайте директорию для хранения дистрибутивов Corax:
+На машине с GitLab Runner создайте директорию для хранения архива Corax:
 
 ```bash
 sudo mkdir -p /distribs
@@ -107,25 +110,69 @@ sudo chmod 755 /distribs
 
 **Примечание:** Если пользователь, от имени которого запускается runner, отличается от `gitlab-runner`, замените его на актуальное имя.
 
-### Размещение дистрибутивов
+### Подготовка архива corax_prepare.zip
 
-Скопируйте дистрибутивы Corax в директорию `/distribs`:
+Архив `corax_prepare.zip` должен содержать полную структуру проекта Corax со всеми необходимыми файлами и дистрибутивами.
 
-```bash
-# Пример копирования с локальной машины
-scp KFK-11.340.0-16-distrib.zip gitlab-runner@runner-host:/distribs/
-scp corax-scriptMerger-2.0.0.zip gitlab-runner@runner-host:/distribs/
-scp ansible_corax_json_exporter.zip gitlab-runner@runner-host:/distribs/
+**Структура архива:**
 
-# Или через wget, если файлы доступны по URL
-ssh gitlab-runner@runner-host
-cd /distribs
-wget https://example.com/path/to/KFK-11.340.0-16-distrib.zip
-wget https://example.com/path/to/corax-scriptMerger-2.0.0.zip
-wget https://example.com/path/to/ansible_corax_json_exporter.zip
+```
+corax_prepare/
+├── ansible.cfg
+├── files/
+│   ├── KFK-11.340.0-16-distrib.zip         # Дистрибутив Kafka/Corax
+│   ├── ansible_corax_json_exporter.zip      # JSON exporter
+│   ├── corax-scriptMerger-2.0.0.zip        # Script merger
+│   ├── group_vars_all.j2                    # Шаблон group_vars (не используется в CI)
+│   ├── inventory.j2                         # Шаблон inventory (не используется в CI)
+│   ├── post_install_corax.yaml              # Пост-установочный playbook
+│   ├── prepare.sh                           # Скрипт подготовки дистрибутивов
+│   └── prepare_corax.yaml                   # Playbook подготовки Corax
+├── group_vars/
+│   └── all.yaml                             # Будет заменен CI/CD
+├── inventory.ini                            # Будет заменен CI/CD
+├── playbook.yaml                            # Основной playbook
+├── lvm.yaml                                 # LVM playbook (опционально)
+└── tmp/                                     # Временные файлы (опционально)
 ```
 
-### Проверка наличия дистрибутивов
+**Важные замечания:**
+- Дистрибутивы (KFK-*.zip, corax-*.zip, ansible_*.zip) должны находиться в директории `files/`
+- Файлы `inventory.ini` и `group_vars/all.yaml` будут автоматически сгенерированы и заменены pipeline
+- Архив должен распаковываться с созданием директории `corax_prepare/` (не в корень)
+
+### Создание архива
+
+Создайте архив из структуры проекта:
+
+```bash
+# Перейдите в родительскую директорию проекта
+cd /path/to/parent
+
+# Создайте архив
+zip -r corax_prepare.zip corax_prepare/
+
+# Или, если вы уже в директории проекта:
+cd /path/to/corax_prepare
+cd ..
+zip -r corax_prepare.zip corax_prepare/
+```
+
+### Размещение архива на Runner
+
+Скопируйте архив `corax_prepare.zip` в директорию `/distribs` на runner:
+
+```bash
+# Копирование с локальной машины
+scp corax_prepare.zip gitlab-runner@runner-host:/distribs/
+
+# Или через wget, если архив доступен по URL
+ssh gitlab-runner@runner-host
+cd /distribs
+wget https://example.com/path/to/corax_prepare.zip
+```
+
+### Проверка архива на Runner
 
 ```bash
 ssh gitlab-runner@runner-host
@@ -136,12 +183,24 @@ ls -lh /distribs/
 
 ```
 total 500M
--rw-r--r-- 1 gitlab-runner gitlab-runner 450M Jan 12 10:00 KFK-11.340.0-16-distrib.zip
--rw-r--r-- 1 gitlab-runner gitlab-runner  30M Jan 12 10:01 corax-scriptMerger-2.0.0.zip
--rw-r--r-- 1 gitlab-runner gitlab-runner  20M Jan 12 10:02 ansible_corax_json_exporter.zip
+-rw-r--r-- 1 gitlab-runner gitlab-runner 500M Jan 12 10:00 corax_prepare.zip
 ```
 
-**Важно:** Если используется другая версия KFK, обновите переменную `KFK_VERSION` в GitLab CI/CD или в файле `ci/variables.yml`.
+Проверьте целостность архива:
+
+```bash
+unzip -t /distribs/corax_prepare.zip
+```
+
+Просмотрите содержимое архива:
+
+```bash
+unzip -l /distribs/corax_prepare.zip | head -30
+```
+
+**Важно:**
+- Если используется другая версия KFK, обновите переменную `KFK_VERSION` в GitLab CI/CD или в файле `ci/variables.yml`
+- Убедитесь, что имя архива `corax_prepare.zip` совпадает с переменной `CORAX_ARCHIVE` в `ci/variables.yml`
 
 ---
 
@@ -327,27 +386,35 @@ Pipeline разбит на модули для удобства модифика
 
 **Автоматический запуск**
 
+- Проверяет наличие архива `corax_prepare.zip` в `/distribs` на runner
+- Распаковывает архив во временную рабочую директорию
 - Генерирует `inventory.ini` из переменной `CORAX_NODES`
-- Генерирует `group_vars/all.yaml` с параметрами компонентов
-- Создает `ansible.cfg` с настройками Ansible
-- Сохраняет SSH ключ для последующего использования
-- Создает артефакты для следующего stage
+- Генерирует `group_vars/all.yaml` с параметрами компонентов из GitLab CI/CD переменных
+- Заменяет сгенерированные файлы в распакованной структуре
+- Обновляет `ansible.cfg` с правильными настройками
+- Добавляет SSH ключ в структуру
+- Создает манифест конфигурации
+- Сохраняет всю подготовленную структуру как артефакт
 
 **Длительность:** ~1-2 минуты
+
+**Примечание:** Этот stage НЕ требует копирования отдельных дистрибутивов - они уже находятся в архиве `corax_prepare.zip` в директории `files/`.
 
 ### Stage 2: node_preparation
 
 **Ручной запуск (requires manual approval)**
 
 - Проверяет SSH доступ к деплой ноде
-- Устанавливает необходимые пакеты на деплой ноде (ansible, unzip, java-17, jq, и т.д.)
-- Создает структуру директорий для Corax
-- Копирует конфигурационные файлы на деплой ноду
-- **Копирует дистрибутивы с runner (/distribs) на деплой ноду**
+- Устанавливает необходимые пакеты на деплой ноде (ansible, unzip, java-17, jq, rsync, и т.д.)
+- Создает директорию `${CORAX_DIR}` на деплой ноде (с backup старой версии если существует)
+- **Копирует всю подготовленную структуру из артефактов на деплой ноду через rsync**
 - Настраивает SSH ключи для доступа к рабочим нодам
-- Проверяет доступность рабочих нод
+- Проверяет доступность рабочих нод из inventory
+- Выполняет тестовый Ansible ping
 
-**Длительность:** ~5-10 минут
+**Длительность:** ~3-7 минут
+
+**Примечание:** Вся структура Corax (включая дистрибутивы в `files/`) копируется одной операцией rsync, что значительно упрощает процесс.
 
 ---
 
@@ -452,8 +519,9 @@ Pipeline разбит на модули для удобства модифика
 
 Убедитесь, что:
 - ✓ GitLab Runner работает в режиме shell
-- ✓ Дистрибутивы Corax размещены в `/distribs` на runner
-- ✓ Необходимые утилиты установлены на runner (python3, jq, ssh, scp)
+- ✓ Архив `corax_prepare.zip` размещен в `/distribs` на runner
+- ✓ Архив содержит все необходимые файлы и дистрибутивы в структуре `corax_prepare/`
+- ✓ Необходимые утилиты установлены на runner (python3, jq, ssh, scp, rsync, unzip)
 - ✓ Все GitLab CI/CD переменные настроены
 - ✓ Публичный SSH ключ добавлен на деплой ноду и все рабочие ноды
 - ✓ Все ноды доступны по SSH
@@ -609,18 +677,65 @@ sudo chown gitlab-runner:gitlab-runner /distribs
 3. Убедитесь, что нет лишних запятых
 4. Пример корректного формата см. в разделе [Примеры конфигурации](#примеры-конфигурации)
 
-### Ошибка: "Distribs not found"
+### Ошибка: "Corax archive not found"
 
-**Проблема:** Дистрибутивы не найдены в `/distribs` на runner.
+**Проблема:** Архив `corax_prepare.zip` не найден в `/distribs` на runner.
 
 **Решение:**
-1. Проверьте наличие файлов:
+1. Проверьте наличие архива:
    ```bash
    ssh gitlab-runner@runner-host
    ls -lh /distribs/
    ```
-2. Убедитесь, что имена файлов соответствуют ожидаемым (с учетом версии KFK)
-3. Если используется другая директория, установите переменную `DISTRIBS_DIR` в GitLab
+2. Убедитесь, что файл называется `corax_prepare.zip` (или обновите переменную `CORAX_ARCHIVE`)
+3. Скопируйте архив на runner:
+   ```bash
+   scp corax_prepare.zip gitlab-runner@runner-host:/distribs/
+   ```
+4. Проверьте целостность архива:
+   ```bash
+   unzip -t /distribs/corax_prepare.zip
+   ```
+5. Если используется другая директория, установите переменную `DISTRIBS_DIR` в GitLab
+
+### Ошибка: "Archive is corrupted"
+
+**Проблема:** Архив поврежден или имеет неверный формат.
+
+**Решение:**
+1. Проверьте целостность архива локально перед загрузкой:
+   ```bash
+   unzip -t corax_prepare.zip
+   ```
+2. Пересоздайте архив:
+   ```bash
+   cd /path/to/parent
+   zip -r corax_prepare.zip corax_prepare/
+   ```
+3. Используйте SCP с опцией `-p` для сохранения атрибутов:
+   ```bash
+   scp -p corax_prepare.zip gitlab-runner@runner-host:/distribs/
+   ```
+
+### Ошибка: "Files missing in archive"
+
+**Проблема:** Отсутствуют ожидаемые файлы в архиве (playbook.yaml, files/, и т.д.).
+
+**Решение:**
+1. Просмотрите содержимое архива:
+   ```bash
+   unzip -l /distribs/corax_prepare.zip
+   ```
+2. Убедитесь, что архив создан с правильной структурой (с директорией `corax_prepare/`)
+3. Проверьте наличие обязательных файлов:
+   - `playbook.yaml`
+   - `ansible.cfg`
+   - `files/KFK-*.zip`
+   - `files/corax-scriptMerger-*.zip`
+   - `files/ansible_corax_json_exporter.zip`
+   - `files/prepare.sh`
+   - `files/prepare_corax.yaml`
+   - `files/post_install_corax.yaml`
 
 ### Модификация Pipeline
 
@@ -646,8 +761,9 @@ sudo chown gitlab-runner:gitlab-runner /distribs
 
 ---
 
-**Версия документа:** 2.0
+**Версия документа:** 3.0
 **Дата обновления:** 2025-01-12
 **Целевая платформа:** ALT Linux 10.2
 **Версия Corax:** KFK 11.340.0-16
 **Runner executor:** shell
+**Структура деплоя:** Unified archive (`corax_prepare.zip`)

@@ -81,48 +81,60 @@
     - echo "✓ Все обязательные переменные установлены"
     - echo ""
 
-# === Шаблон для проверки дистрибутивов на runner ===
-.check_distribs:
+# === Шаблон для проверки архива Corax на runner ===
+.check_corax_archive:
   before_script:
-    - echo "=== Проверка наличия дистрибутивов на runner ==="
-    - echo "Директория с дистрибутивами: ${DISTRIBS_DIR}"
+    - echo "=== Проверка наличия архива Corax на runner ==="
+    - echo "Директория: ${DISTRIBS_DIR}"
+    - echo "Архив: ${CORAX_ARCHIVE}"
+    - echo "Полный путь: ${DISTRIBS_DIR}/${CORAX_ARCHIVE}"
+    - echo ""
     - |
+      # Проверка директории
       if [ ! -d "${DISTRIBS_DIR}" ]; then
         echo "✗ ERROR: Директория ${DISTRIBS_DIR} не существует на runner!"
-        echo "Создайте директорию и поместите туда дистрибутивы Corax"
+        echo "Создайте директорию: sudo mkdir -p ${DISTRIBS_DIR}"
         exit 1
       fi
-    - echo "✓ Директория существует"
+      echo "✓ Директория ${DISTRIBS_DIR} существует"
     - echo ""
     - echo "--- Содержимое ${DISTRIBS_DIR}: ---"
     - ls -lh ${DISTRIBS_DIR}/ || true
     - echo ""
     - |
-      # Проверка наличия необходимых файлов
-      REQUIRED_FILES=(
-        "KFK-${KFK_VERSION}-distrib.zip"
-        "corax-scriptMerger-2.0.0.zip"
-        "ansible_corax_json_exporter.zip"
-      )
-
-      MISSING_FILES=0
-      for FILE in "${REQUIRED_FILES[@]}"; do
-        if [ -f "${DISTRIBS_DIR}/${FILE}" ]; then
-          echo "✓ Найден: ${FILE} ($(du -h ${DISTRIBS_DIR}/${FILE} | cut -f1))"
-        else
-          echo "✗ Отсутствует: ${FILE}"
-          MISSING_FILES=$((MISSING_FILES+1))
-        fi
-      done
-
-      if [ $MISSING_FILES -gt 0 ]; then
+      # Проверка наличия архива corax_prepare.zip
+      if [ ! -f "${DISTRIBS_DIR}/${CORAX_ARCHIVE}" ]; then
+        echo "✗ ERROR: Архив ${CORAX_ARCHIVE} не найден в ${DISTRIBS_DIR}!"
         echo ""
-        echo "WARNING: Не все дистрибутивы найдены (отсутствует: $MISSING_FILES)"
-        echo "Убедитесь, что все необходимые файлы размещены в ${DISTRIBS_DIR}/"
-      else
+        echo "Архив должен содержать структуру проекта Corax:"
+        echo "  - ansible.cfg"
+        echo "  - playbook.yaml"
+        echo "  - files/ (с дистрибутивами и шаблонами)"
+        echo "  - group_vars/"
+        echo "  - и другие файлы проекта"
         echo ""
-        echo "✓ Все необходимые дистрибутивы найдены"
+        echo "Разместите архив: scp corax_prepare.zip runner-host:${DISTRIBS_DIR}/"
+        exit 1
       fi
+    - echo "✓ Архив найден: ${CORAX_ARCHIVE}"
+    - du -h ${DISTRIBS_DIR}/${CORAX_ARCHIVE}
+    - echo ""
+    - |
+      # Проверка целостности архива
+      echo "--- Проверка целостности архива ---"
+      if unzip -t ${DISTRIBS_DIR}/${CORAX_ARCHIVE} > /dev/null 2>&1; then
+        echo "✓ Архив корректен"
+      else
+        echo "✗ ERROR: Архив поврежден или имеет неверный формат!"
+        exit 1
+      fi
+    - echo ""
+    - |
+      # Просмотр содержимого архива
+      echo "--- Содержимое архива (preview): ---"
+      unzip -l ${DISTRIBS_DIR}/${CORAX_ARCHIVE} | head -30
+    - echo ""
+    - echo "✓ Архив Corax готов к использованию"
     - echo ""
 
 # === Общие настройки для всех jobs ===

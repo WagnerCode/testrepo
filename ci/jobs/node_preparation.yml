@@ -1,6 +1,6 @@
 # ============================================================================
 # Job: Node Preparation
-# Подготовка деплой ноды для развертывания Corax
+# Подготовка деплой ноды и развертывание структуры Corax
 # ============================================================================
 
 prepare_deploy_node:
@@ -10,7 +10,6 @@ prepare_deploy_node:
     - .check_runner_environment
     - .validate_required_vars
     - .setup_ssh
-    - .check_distribs
 
   dependencies:
     - generate_configs
@@ -22,6 +21,7 @@ prepare_deploy_node:
     - echo ""
     - echo "Деплой нода: ${DEPLOY_NODE_HOST}"
     - echo "Пользователь: ${DEPLOY_NODE_USER}"
+    - echo "Целевая директория: ${CORAX_DIR}"
     - echo ""
 
     # === Проверка SSH доступа ===
@@ -103,119 +103,90 @@ prepare_deploy_node:
 
     - echo ""
 
-    # === Создание структуры директорий ===
-    - echo "=== Создание структуры директорий на деплой ноде ==="
+    # === Создание директории Corax ===
+    - echo "=== Подготовка директории ${CORAX_DIR} на деплой ноде ==="
     - |
       ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
         ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST} bash << EOFREMOTE
       set -e
 
-      echo "Создание директорий Corax..."
-      mkdir -p ${TMP_DIR}
-      mkdir -p ${CORAX_DIR}/inventories/group_vars
-      mkdir -p ${CORAX_DIR}/playbooks
-      mkdir -p ${CORAX_DIR}/roles
-      mkdir -p ${CORAX_DIR}/files
+      # Удаление старой директории если существует (для чистого деплоя)
+      if [ -d "${CORAX_DIR}" ]; then
+        echo "WARNING: Директория ${CORAX_DIR} уже существует"
+        echo "Создание резервной копии..."
+        mv ${CORAX_DIR} ${CORAX_DIR}.backup.$(date +%Y%m%d_%H%M%S) || {
+          echo "WARNING: Не удалось создать backup, удаляем директорию..."
+          rm -rf ${CORAX_DIR}
+        }
+      fi
 
-      echo ""
-      echo "Структура директорий:"
-      tree -L 2 ${CORAX_DIR}/ 2>/dev/null || ls -la ${CORAX_DIR}/
-
-      echo ""
-      echo "✓ Структура директорий создана"
+      # Создание директории
+      mkdir -p ${CORAX_DIR}
+      echo "✓ Директория ${CORAX_DIR} подготовлена"
       EOFREMOTE
 
     - echo ""
 
-    # === Копирование конфигурационных файлов ===
-    - echo "=== Копирование конфигурационных файлов на деплой ноду ==="
-    - echo "Источник: ${RUNNER_WORKDIR}"
-    - echo "Назначение: ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:${CORAX_DIR}"
+    # === Копирование подготовленной структуры Corax ===
+    - echo "=== Копирование структуры Corax на деплой ноду ==="
+    - echo "Источник: ${RUNNER_WORKDIR}/"
+    - echo "Назначение: ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:${CORAX_DIR}/"
+    - echo ""
+    - |
+      echo "Копирование файлов через rsync..."
+      rsync -avz --progress \
+        -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
+        ${RUNNER_WORKDIR}/ \
+        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:${CORAX_DIR}/
+
+      echo ""
+      echo "✓ Структура Corax успешно скопирована"
     - echo ""
 
-    # Копирование inventory
+    # === Проверка скопированной структуры ===
+    - echo "=== Проверка скопированной структуры на деплой ноде ==="
     - |
-      echo "Копирование inventory.ini..."
-      scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
-        ${RUNNER_WORKDIR}/inventories/inventory.ini \
-        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:${CORAX_DIR}/inventories/inventory.ini
-      echo "✓ inventory.ini скопирован"
-
-    # Копирование group_vars
-    - |
-      echo "Копирование group_vars/all.yaml..."
-      scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
-        ${RUNNER_WORKDIR}/inventories/group_vars/all.yaml \
-        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:${CORAX_DIR}/inventories/group_vars/all.yaml
-      echo "✓ group_vars/all.yaml скопирован"
-
-    # Копирование ansible.cfg
-    - |
-      echo "Копирование ansible.cfg..."
-      scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
-        ${RUNNER_WORKDIR}/ansible.cfg \
-        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:${CORAX_DIR}/ansible.cfg
-      echo "✓ ansible.cfg скопирован"
-
-    # Копирование SSH ключа
-    - |
-      echo "Копирование SSH ключа..."
-      scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
-        ${RUNNER_WORKDIR}/ssh_private_key \
-        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:${CORAX_DIR}/ssh_private_key
       ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
-        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST} "chmod 600 ${CORAX_DIR}/ssh_private_key"
-      echo "✓ SSH ключ скопирован"
+        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST} bash << EOFREMOTE
+      set -e
+      cd ${CORAX_DIR}
 
-    - echo ""
+      echo "--- Структура директории ${CORAX_DIR}: ---"
+      tree -L 2 . 2>/dev/null || ls -laR | head -80
 
-    # === Копирование playbook и файлов проекта ===
-    - echo "=== Копирование playbook и вспомогательных файлов ==="
-    - |
-      echo "Копирование playbook.yaml..."
-      scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
-        ${CI_PROJECT_DIR}/playbook.yaml \
-        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:${CORAX_DIR}/playbook.yaml || {
-          echo "WARNING: playbook.yaml не найден в ${CI_PROJECT_DIR}"
-        }
+      echo ""
+      echo "--- Проверка ключевых файлов: ---"
 
-    - |
-      echo "Копирование вспомогательных файлов из директории files/..."
-      scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -r \
-        ${CI_PROJECT_DIR}/files/* \
-        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:${CORAX_DIR}/files/ 2>/dev/null || {
-          echo "WARNING: Некоторые файлы из директории files/ не скопированы"
-        }
-
-    - echo "✓ Файлы проекта скопированы"
-    - echo ""
-
-    # === Копирование дистрибутивов с runner на деплой ноду ===
-    - echo "=== Копирование дистрибутивов Corax на деплой ноду ==="
-    - echo "Источник: ${DISTRIBS_DIR}"
-    - echo "Назначение: ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:${CORAX_DIR}/files/"
-    - echo ""
-    - |
-      REQUIRED_FILES=(
-        "KFK-${KFK_VERSION}-distrib.zip"
-        "corax-scriptMerger-2.0.0.zip"
-        "ansible_corax_json_exporter.zip"
+      # Проверка обязательных файлов
+      FILES_TO_CHECK=(
+        "playbook.yaml"
+        "ansible.cfg"
+        "inventory.ini"
+        "group_vars/all.yaml"
+        "ssh_private_key"
       )
 
-      for FILE in "${REQUIRED_FILES[@]}"; do
-        if [ -f "${DISTRIBS_DIR}/${FILE}" ]; then
-          echo "Копирование ${FILE}..."
-          scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
-            ${DISTRIBS_DIR}/${FILE} \
-            ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:${CORAX_DIR}/files/${FILE}
-          echo "✓ ${FILE} скопирован ($(du -h ${DISTRIBS_DIR}/${FILE} | cut -f1))"
+      for FILE in "\${FILES_TO_CHECK[@]}"; do
+        if [ -f "\${FILE}" ]; then
+          echo "✓ \${FILE} ($(stat -c%s \${FILE} 2>/dev/null || stat -f%z \${FILE} 2>/dev/null || echo '?' ) bytes)"
         else
-          echo "✗ WARNING: Файл ${FILE} не найден в ${DISTRIBS_DIR}"
+          echo "✗ WARNING: \${FILE} не найден!"
         fi
       done
 
-    - echo ""
-    - echo "✓ Дистрибутивы скопированы"
+      echo ""
+      echo "--- Проверка директории files/: ---"
+      if [ -d "files/" ]; then
+        ls -lh files/ | head -10
+        echo "✓ Директория files/ найдена"
+      else
+        echo "✗ WARNING: Директория files/ не найдена!"
+      fi
+
+      echo ""
+      echo "✓ Проверка завершена"
+      EOFREMOTE
+
     - echo ""
 
     # === Настройка SSH доступа к рабочим нодам ===
@@ -255,7 +226,7 @@ prepare_deploy_node:
       cd ${CORAX_DIR}
 
       # Извлечение IP адресов из inventory.ini
-      NODES=$(grep 'ansible_host=' inventories/inventory.ini | grep -v '^#' | awk '{print $2}' | cut -d= -f2 | sort -u)
+      NODES=$(grep 'ansible_host=' inventory.ini | grep -v '^#' | awk '{print $2}' | cut -d= -f2 | sort -u)
 
       if [ -z "$NODES" ]; then
         echo "WARNING: Не найдено нод в inventory.ini для проверки"
@@ -309,21 +280,13 @@ prepare_deploy_node:
       set -e
       cd ${CORAX_DIR}
 
-      echo "--- Структура проекта Corax ---"
-      tree -L 3 . 2>/dev/null || ls -laR | head -50
-
-      echo ""
-      echo "--- Содержимое директории files ---"
-      ls -lh files/ 2>/dev/null || echo "Директория files/ пуста"
-
-      echo ""
       echo "--- Проверка Ansible конфигурации ---"
       export ANSIBLE_CONFIG=${CORAX_DIR}/ansible.cfg
       ansible --version
 
       echo ""
       echo "--- Тестовый запуск Ansible ping ---"
-      ansible all -i inventories/inventory.ini -m ping || {
+      ansible all -i inventory.ini -m ping || {
         echo ""
         echo "WARNING: Ansible ping не прошел успешно"
         echo "Это ожидаемо, если SSH ключи еще не распространены на рабочие ноды"
@@ -353,15 +316,15 @@ prepare_deploy_node:
     - echo "   (см. публичный ключ в выводе выше)"
     - echo ""
     - echo "4. Запустите playbook для подготовки дистрибутивов:"
-    - echo "   ansible-playbook -i inventories/inventory.ini playbook.yaml"
+    - echo "   ansible-playbook -i inventory.ini playbook.yaml"
     - echo ""
     - echo "5. Запустите развертывание компонентов Corax:"
-    - echo "   ansible-playbook -i inventories/inventory.ini prepare_corax.yaml"
-    - echo "   ansible-playbook -i inventories/inventory.ini playbooks/kafka-zookeeper-SE.yml -t enabled_service"
-    - echo "   ansible-playbook -i inventories/inventory.ini playbooks/kafka-zookeeper-SE.yml"
-    - echo "   ansible-playbook -i inventories/inventory.ini playbooks/crxsr.yml -t root,install,start"
-    - echo "   ansible-playbook -i inventories/inventory.ini playbooks/crxui.yml -t root,install"
-    - echo "   ansible-playbook -i inventories/inventory.ini post_install_corax.yaml"
+    - echo "   ansible-playbook -i inventory.ini prepare_corax.yaml"
+    - echo "   ansible-playbook -i inventory.ini playbooks/kafka-zookeeper-SE.yml -t enabled_service"
+    - echo "   ansible-playbook -i inventory.ini playbooks/kafka-zookeeper-SE.yml"
+    - echo "   ansible-playbook -i inventory.ini playbooks/crxsr.yml -t root,install,start"
+    - echo "   ansible-playbook -i inventory.ini playbooks/crxui.yml -t root,install"
+    - echo "   ansible-playbook -i inventory.ini post_install_corax.yaml"
     - echo ""
     - echo "=========================================="
     - echo ""
