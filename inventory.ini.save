@@ -1,0 +1,3 @@
+#vm-ansible	ansible_host=10.0.0.13 	ansible_user=user
+vm-ans-osp		ansible_host=10.0.0.18 	ansible_user=user
+vm-corax	ansible_host=10.0.0.51 ansible_user=user1

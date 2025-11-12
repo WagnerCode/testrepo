@@ -1,0 +1,92 @@
+- name: Prepare corax installer
+  hosts: all
+  become: yes
+  vars:
+    KFK_distrib: KFK-11.340.0-16-distrib.zip
+    corax_scriptmanager: corax-scriptMerger-2.0.0.zip
+    json_exporter: ansible_corax_json_exporter.zip
+    tmp_dir: /pub/corax/tmp/
+    corax_dir: /pub/corax
+  tasks:
+
+    - name: Set hostname
+      ansible.builtin.hostname:
+        name: "{{ inventory_hostname }}"
+
+    - name: For RED OS clean /etc/resolv.conf if there is trash
+      ansible.builtin.lineinfile:
+        path: /etc/resolv.conf
+        regexp: 'nameserver 10.0.2.3'
+        state: absent
+      when: ansible_facts['os_family'] == 'REDOS'
+
+    - name: Install OS environment required packages
+      become: yes
+      ansible.builtin.package:
+        name:
+          - ansible
+          - unzip
+          - sshpass
+          - java-17-openjdk
+          - jq
+        state: latest
+
+    - name: "Create corax dir - {{ tmp_dir }}"
+      ansible.builtin.file:
+        path: "{{ tmp_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: "Copy files into {{ tmp_dir }}"
+      ansible.builtin.copy:
+        src: "{{ item }}"
+        dest: "{{ tmp_dir }}"
+      with_items:
+        - "./files/{{ KFK_distrib }}"
+        - "./files/{{ json_exporter }}"
+        - "./files/{{ corax_scriptmanager }}"
+        - ./files/prepare.sh
+
+    - name: Set exec permission for prepare.sh
+      ansible.builtin.file:
+        path: "{{ tmp_dir }}prepare.sh"
+        mode: '0777'
+
+    - name: Run prepare script for distrib
+      ansible.builtin.shell: "./prepare.sh"
+      args:
+        chdir: "{{ tmp_dir }}"
+        executable: /bin/bash
+
+    - name: Create directory for inventory
+      ansible.builtin.file:
+        path: "{{ corax_dir }}/inventories/group_vars/"
+        mode: '0755'
+        recurse: true
+
+    - name: Create group_vars #NOW ONLY FOR SINGLE INSTANCE
+      ansible.builtin.template:
+        src: ./files/group_vars_all.j2
+        dest: "{{ corax_dir }}/inventories/group_vars/all.yaml"
+
+    - name: Create template for inventory file
+      ansible.builtin.template:
+        src: ./files/inventory.j2
+        dest: "{{ corax_dir }}/inventories/inventory.ini"
+
+    - name: Create prepare_corax.yaml playbook
+      ansible.builtin.copy:
+        src: ./files/prepare_corax.yaml
+        dest: "{{ corax_dir }}/prepare_corax.yaml"
+
+    - name: Create post_install_corax.yaml playbook
+      ansible.builtin.copy:
+        src: ./files/post_install_corax.yaml
+        dest: "{{ corax_dir }}/post_install_corax.yaml"
+
+    - name: "Remove {{ tmp_dir }}"
+      ansible.builtin.file:
+        path: "{{ tmp_dir }}"
+        state: absent
+
+

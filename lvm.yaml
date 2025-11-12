@@ -1,0 +1,39 @@
+- name: Create additional disk for service
+  hosts: all
+  become: yes
+  vars:
+    disk: /dev/vdb
+    mount_dir: /pub/opt
+    lvm_name: corax
+  tasks:
+
+    - name: "Create VG with {{ disk }}"
+      community.general.lvg:
+        vg: "vg_{{ lvm_name }}"
+        pvs: "{{ disk }}"
+
+    - name: Create LV
+      community.general.lvol:
+        vg: "vg_{{ lvm_name }}"
+        lv: "lv_{{ lvm_name }}"
+        size: 100%FREE
+        shrink: false
+
+    - name: Create mkfs.xfs
+      community.general.filesystem:
+        fstype: xfs
+        dev: "/dev/vg_{{ lvm_name }}/lv_{{ lvm_name }}"
+
+    - name: "Create {{ mount_dir }}"
+      ansible.builtin.file:
+        path: "{{ mount_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Create mount point in /etc/fstab
+      ansible.posix.mount:
+        path: "{{ mount_dir }}"
+        src: "/dev/vg_{{ lvm_name }}/lv_{{ lvm_name }}"
+        fstype: xfs
+        state: mounted
+

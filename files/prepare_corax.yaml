@@ -1,0 +1,73 @@
+- name: Prepare corax vm
+  hosts: all
+  become: yes
+  tasks:
+
+    - name: Set hostname in /etc/hosts
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        regexp: "{{ ansible_default_ipv4.address }}"
+        line:  "{{ ansible_default_ipv4.address }}  {{ inventory_hostname }}"
+
+    - name: Set hostname
+      ansible.builtin.hostname:
+        name: "{{ inventory_hostname }}"
+
+    - name: "Create user {{ kafka_user }}"
+      ansible.builtin.user:
+        name: "{{ kafka_user }}"
+   
+    - name: For RED OS clean /etc/resolv.conf if there is trash
+      ansible.builtin.lineinfile:
+        path: /etc/resolv.conf
+        regexp: 'nameserver 10.0.2.3'
+        state: absent
+      when: ansible_os_family == 'REDOS'
+
+    - name: Install require pkgs for Altlinux
+      community.general.apt_rpm:
+        pkg:
+          - java-17-openjdk
+          - acl
+          - unzip
+        state: present
+        update_cache: true
+      when: ansible_os_family == 'Altlinux'
+
+    - name: Install require pkgs for RedOS
+      ansible.builtin.dnf:
+        name:
+          - java-17-openjdk
+          - acl
+          - unzip
+        state: present
+      when: ansible_os_family == 'REDOS'
+
+    - name: Create directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        owner: "{{ kafka_user }}"
+        group: "{{ kafka_user }}"
+        mode: '0775'
+        recurse: true
+      with_items:
+        - "{{ kafka.installdir }}"
+        - "{{ kafka.datadir }}"
+        - "{{ zookeeper.installdir }}"
+        - "{{ zookeeper.datadir }}"
+        - "{{ kafka.installdir}}/bin"
+
+    - name: Change fcontext selinux for bin directory
+      community.general.sefcontext:
+        target: "{{ kafka.installdir }}/bin(/.*)?"
+        setype: bin_t
+        state: present
+      when: ansible_selinux.status == 'enabled'
+
+    - name: Apply new context for bin directory
+      ansible.builtin.command: "restorecon -rv {{ kafka.installdir }}/bin"
+      when: ansible_selinux.status == 'enabled'
+
+    - name: Temp permissive selinux for install
+      ansible.builtin.command: "setenforce 0"
+      when: ansible_selinux.status == 'enabled'

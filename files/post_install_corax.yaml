@@ -1,0 +1,15 @@
+- name: Post install corax vm
+  hosts: all
+  become: yes
+  tasks:
+
+    - name: Change fcontext selinux for bin directory
+      community.general.sefcontext:
+        target: "{{ kafka.installdir }}/bin(/.*)?"
+        setype: bin_t
+        state: present
+      when: ansible_selinux.status == 'enabled'
+
+    - name: Apply new context for bin directory
+      ansible.builtin.command: "restorecon -rv {{ kafka.installdir }}/bin"
+      when: ansible_selinux.status == 'enabled'
