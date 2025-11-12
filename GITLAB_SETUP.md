@@ -1,16 +1,17 @@
-# Настройка GitLab CI/CD для деплоя Corax на ALT Linux
+# Настройка GitLab CI/CD для деплоя Corax на ALT Linux (Shell Runner)
 
-Данный документ описывает настройку GitLab CI/CD переменных и подготовку окружения для автоматизированного развертывания кластера Corax на ALT Linux 10.2.
+Данный документ описывает настройку GitLab CI/CD переменных и подготовку окружения для автоматизированного развертывания кластера Corax на ALT Linux 10.2 с использованием GitLab Runner в режиме **shell executor**.
 
 ## Оглавление
 
 - [Предварительные требования](#предварительные-требования)
+- [Настройка GitLab Runner](#настройка-gitlab-runner)
+- [Подготовка дистрибутивов на Runner](#подготовка-дистрибутивов-на-runner)
 - [Настройка GitLab CI/CD переменных](#настройка-gitlab-cicd-переменных)
-  - [Обязательные переменные](#обязательные-переменные)
-  - [Опциональные переменные](#опциональные-переменные)
 - [Подготовка SSH ключей](#подготовка-ssh-ключей)
+- [Структура Pipeline](#структура-pipeline)
 - [Примеры конфигурации](#примеры-конфигурации)
-- [Запуск pipeline](#запуск-pipeline)
+- [Запуск Pipeline](#запуск-pipeline)
 - [Troubleshooting](#troubleshooting)
 
 ---
@@ -19,30 +20,128 @@
 
 ### Инфраструктура
 
-1. **Деплой нода** - сервер с ALT Linux 10.2, с которого будет производиться развертывание
+1. **GitLab Runner (shell executor)**
+   - Установлен GitLab Runner в режиме shell
+   - Доступ к интернету (опционально, для обновлений)
+   - Установлены необходимые утилиты: `python3`, `jq`, `ssh`, `scp`
+   - Директория `/distribs` для размещения дистрибутивов Corax
+
+2. **Деплой нода** - сервер с ALT Linux 10.2, с которого будет производиться развертывание
    - Минимум 2 CPU, 4GB RAM, 20GB диск
    - Установлена ОС ALT Linux 10.2
    - Открыт SSH доступ (порт 22)
 
-2. **Рабочие ноды кластера** - серверы для установки компонентов Corax (Kafka, Zookeeper, CRXSR, CRXUI)
+3. **Рабочие ноды кластера** - серверы для установки компонентов Corax
    - Рекомендуется минимум 3 ноды для отказоустойчивого кластера
    - Каждая нода: минимум 4 CPU, 8GB RAM, 100GB диск
    - Установлена ОС ALT Linux 10.2
    - Открыт SSH доступ (порт 22)
 
-3. **GitLab Runner** - для выполнения CI/CD pipeline
-   - Тип: Docker executor
-   - Доступ к интернету для скачивания образов
+---
 
-### Дистрибутивы Corax
+## Настройка GitLab Runner
 
-Необходимо подготовить следующие файлы дистрибутивов (размещаются в директории `files/`):
+### Проверка GitLab Runner
 
-- `KFK-11.340.0-16-distrib.zip` - основной дистрибутив Kafka/Corax
-- `corax-scriptMerger-2.0.0.zip` - утилиты для работы с конфигами
-- `ansible_corax_json_exporter.zip` - экспортер метрик
+Убедитесь, что GitLab Runner установлен и работает в режиме shell:
 
-**Важно:** После выполнения stage `node_preparation`, эти файлы нужно будет вручную загрузить на деплой ноду в директорию `/pub/corax/files/`.
+```bash
+# Проверка статуса runner
+sudo gitlab-runner status
+
+# Просмотр конфигурации
+sudo cat /etc/gitlab-runner/config.toml
+```
+
+В конфигурации должно быть указано `executor = "shell"`:
+
+```toml
+[[runners]]
+  name = "my-shell-runner"
+  url = "https://gitlab.example.com/"
+  token = "..."
+  executor = "shell"
+  [runners.custom_build_dir]
+  [runners.cache]
+```
+
+### Установка необходимых утилит на Runner
+
+На машине с GitLab Runner должны быть установлены следующие утилиты:
+
+```bash
+# Для Debian/Ubuntu
+sudo apt-get update
+sudo apt-get install -y python3 python3-pip jq openssh-client
+
+# Для RHEL/CentOS/ALT Linux
+sudo yum install -y python3 python3-pip jq openssh-clients
+
+# Или для ALT Linux через apt-get
+sudo apt-get update
+sudo apt-get install -y python3 python3-module-pip jq openssh-clients
+```
+
+Проверка установленных утилит:
+
+```bash
+python3 --version  # Python 3.x
+jq --version       # jq-1.x
+ssh -V             # OpenSSH_x.x
+scp -V             # OpenSSH_x.x
+```
+
+---
+
+## Подготовка дистрибутивов на Runner
+
+### Создание директории для дистрибутивов
+
+На машине с GitLab Runner создайте директорию для хранения дистрибутивов Corax:
+
+```bash
+sudo mkdir -p /distribs
+sudo chown gitlab-runner:gitlab-runner /distribs
+sudo chmod 755 /distribs
+```
+
+**Примечание:** Если пользователь, от имени которого запускается runner, отличается от `gitlab-runner`, замените его на актуальное имя.
+
+### Размещение дистрибутивов
+
+Скопируйте дистрибутивы Corax в директорию `/distribs`:
+
+```bash
+# Пример копирования с локальной машины
+scp KFK-11.340.0-16-distrib.zip gitlab-runner@runner-host:/distribs/
+scp corax-scriptMerger-2.0.0.zip gitlab-runner@runner-host:/distribs/
+scp ansible_corax_json_exporter.zip gitlab-runner@runner-host:/distribs/
+
+# Или через wget, если файлы доступны по URL
+ssh gitlab-runner@runner-host
+cd /distribs
+wget https://example.com/path/to/KFK-11.340.0-16-distrib.zip
+wget https://example.com/path/to/corax-scriptMerger-2.0.0.zip
+wget https://example.com/path/to/ansible_corax_json_exporter.zip
+```
+
+### Проверка наличия дистрибутивов
+
+```bash
+ssh gitlab-runner@runner-host
+ls -lh /distribs/
+```
+
+Ожидаемый вывод:
+
+```
+total 500M
+-rw-r--r-- 1 gitlab-runner gitlab-runner 450M Jan 12 10:00 KFK-11.340.0-16-distrib.zip
+-rw-r--r-- 1 gitlab-runner gitlab-runner  30M Jan 12 10:01 corax-scriptMerger-2.0.0.zip
+-rw-r--r-- 1 gitlab-runner gitlab-runner  20M Jan 12 10:02 ansible_corax_json_exporter.zip
+```
+
+**Важно:** Если используется другая версия KFK, обновите переменную `KFK_VERSION` в GitLab CI/CD или в файле `ci/variables.yml`.
 
 ---
 
@@ -96,7 +195,7 @@
 ```
 
 **Описание полей:**
-- `name` - имя хоста (будет использовано в inventory)
+- `name` - имя хоста (используется в inventory)
 - `host` - IP адрес ноды
 - `user` - пользователь для SSH подключения (обычно `root`)
 - `roles` - массив ролей для ноды:
@@ -109,45 +208,42 @@
 
 ### Опциональные переменные
 
-Эти переменные имеют значения по умолчанию и могут быть переопределены при необходимости.
+Эти переменные имеют значения по умолчанию (см. `ci/variables.yml`) и могут быть переопределены при необходимости.
 
-#### `DEPLOY_NODE_USER`
-- **По умолчанию:** `root`
-- **Описание:** Пользователь для подключения к деплой ноде
+#### Пользователи
 
-#### `ANSIBLE_USER`
-- **По умолчанию:** `user1`
-- **Описание:** Пользователь Ansible для подключения к рабочим нодам
+- `DEPLOY_NODE_USER` - по умолчанию: `root`
+- `ANSIBLE_USER` - по умолчанию: `user1`
 
-#### `KAFKA_INSTALL_DIR`
-- **По умолчанию:** `/pub/opt/Apache/kafka`
-- **Описание:** Директория установки Kafka и компонентов Corax
+#### Пути на целевых нодах
 
-#### `KAFKA_DATA_DIR`
-- **По умолчанию:** `/pub/KAFKADATA`
-- **Описание:** Директория для данных Kafka
+- `KAFKA_INSTALL_DIR` - по умолчанию: `/pub/opt/Apache/kafka`
+- `KAFKA_DATA_DIR` - по умолчанию: `/pub/KAFKADATA`
+- `ZOOKEEPER_DATA_DIR` - по умолчанию: `/pub/zookeeper`
+- `CORAX_DIR` - по умолчанию: `/pub/corax`
 
-#### `ZOOKEEPER_DATA_DIR`
-- **По умолчанию:** `/pub/zookeeper`
-- **Описание:** Директория для данных Zookeeper
+#### Порты сервисов
 
-#### `CRXUI_PORT`
-- **По умолчанию:** `9090`
-- **Описание:** Порт для Corax UI
+- `CRXUI_PORT` - по умолчанию: `9090`
+- `CRXSR_PORT` - по умолчанию: `8081`
 
-#### `CRXSR_PORT`
-- **По умолчанию:** `8081`
-- **Описание:** Порт для Corax Schema Registry
+#### Версия дистрибутива
 
-#### `KFK_VERSION`
-- **По умолчанию:** `11.340.0-16`
-- **Описание:** Версия дистрибутива KFK (должна соответствовать файлам в `files/`)
+- `KFK_VERSION` - по умолчанию: `11.340.0-16`
+
+#### Путь к дистрибутивам на Runner
+
+- `DISTRIBS_DIR` - по умолчанию: `/distribs`
+
+Если дистрибутивы размещены в другой директории на runner, укажите её в этой переменной.
 
 ---
 
 ## Подготовка SSH ключей
 
-### 1. Генерация SSH ключа (если у вас его нет)
+### 1. Генерация SSH ключа
+
+Если у вас еще нет SSH ключа для деплоя:
 
 ```bash
 # Генерация нового RSA ключа
@@ -164,8 +260,23 @@ ssh-keygen -t rsa -b 4096 -C "gitlab-ci-corax" -f ~/.ssh/corax_deploy_key -N ""
 - Деплой ноде
 - Всех рабочих нодах кластера
 
+**Вариант 1: Использование ssh-copy-id**
+
 ```bash
-# На каждой ноде выполните:
+# Копирование на деплой ноду
+ssh-copy-id -i ~/.ssh/corax_deploy_key.pub root@10.10.11.41
+
+# Копирование на рабочие ноды
+ssh-copy-id -i ~/.ssh/corax_deploy_key.pub root@10.10.11.42
+ssh-copy-id -i ~/.ssh/corax_deploy_key.pub root@10.10.11.43
+ssh-copy-id -i ~/.ssh/corax_deploy_key.pub root@10.10.11.44
+```
+
+**Вариант 2: Ручное добавление**
+
+На каждой ноде выполните:
+
+```bash
 mkdir -p ~/.ssh
 chmod 700 ~/.ssh
 
@@ -177,18 +288,11 @@ EOF
 chmod 600 ~/.ssh/authorized_keys
 ```
 
-Или используйте `ssh-copy-id`:
-```bash
-ssh-copy-id -i ~/.ssh/corax_deploy_key.pub root@10.10.11.41  # деплой нода
-ssh-copy-id -i ~/.ssh/corax_deploy_key.pub root@10.10.11.42  # рабочая нода 1
-ssh-copy-id -i ~/.ssh/corax_deploy_key.pub root@10.10.11.43  # рабочая нода 2
-# ... и так далее для всех нод
-```
-
 ### 3. Добавление приватного ключа в GitLab
 
+Скопируйте приватный ключ:
+
 ```bash
-# Скопируйте приватный ключ
 cat ~/.ssh/corax_deploy_key
 ```
 
@@ -201,6 +305,49 @@ cat ~/.ssh/corax_deploy_key
    - ✓ Protect variable
    - ✓ Expand variable reference
 6. **Add variable**
+
+---
+
+## Структура Pipeline
+
+Pipeline разбит на модули для удобства модификации:
+
+```
+.gitlab-ci.yml                      # Главный файл (включает модули)
+├── ci/
+│   ├── stages.yml                  # Определение stages
+│   ├── variables.yml               # Глобальные переменные
+│   ├── templates.yml               # Переиспользуемые шаблоны
+│   └── jobs/
+│       ├── config_generation.yml   # Job генерации конфигов
+│       └── node_preparation.yml    # Job подготовки деплой ноды
+```
+
+### Stage 1: config_generation
+
+**Автоматический запуск**
+
+- Генерирует `inventory.ini` из переменной `CORAX_NODES`
+- Генерирует `group_vars/all.yaml` с параметрами компонентов
+- Создает `ansible.cfg` с настройками Ansible
+- Сохраняет SSH ключ для последующего использования
+- Создает артефакты для следующего stage
+
+**Длительность:** ~1-2 минуты
+
+### Stage 2: node_preparation
+
+**Ручной запуск (requires manual approval)**
+
+- Проверяет SSH доступ к деплой ноде
+- Устанавливает необходимые пакеты на деплой ноде (ansible, unzip, java-17, jq, и т.д.)
+- Создает структуру директорий для Corax
+- Копирует конфигурационные файлы на деплой ноду
+- **Копирует дистрибутивы с runner (/distribs) на деплой ноду**
+- Настраивает SSH ключи для доступа к рабочим нодам
+- Проверяет доступность рабочих нод
+
+**Длительность:** ~5-10 минут
 
 ---
 
@@ -299,17 +446,19 @@ cat ~/.ssh/corax_deploy_key
 
 ---
 
-## Запуск pipeline
+## Запуск Pipeline
 
-### 1. Проверка конфигурации
+### 1. Проверка готовности
 
-После настройки всех переменных, убедитесь что:
+Убедитесь, что:
+- ✓ GitLab Runner работает в режиме shell
+- ✓ Дистрибутивы Corax размещены в `/distribs` на runner
+- ✓ Необходимые утилиты установлены на runner (python3, jq, ssh, scp)
+- ✓ Все GitLab CI/CD переменные настроены
+- ✓ Публичный SSH ключ добавлен на деплой ноду и все рабочие ноды
 - ✓ Все ноды доступны по SSH
-- ✓ Публичный ключ добавлен на все ноды
-- ✓ GitLab Runner активен и доступен
-- ✓ Дистрибутивы Corax размещены в директории `files/`
 
-### 2. Запуск pipeline
+### 2. Запуск Pipeline
 
 1. Перейдите в **CI/CD → Pipelines**
 2. Нажмите **Run Pipeline**
@@ -318,63 +467,89 @@ cat ~/.ssh/corax_deploy_key
 
 ### 3. Мониторинг выполнения
 
-Pipeline состоит из 2 stages:
+#### Stage 1: config_generation (автоматический)
 
-#### Stage 1: `config_generation` (автоматический)
-- Генерирует конфигурационные файлы из шаблонов
-- Подставляет значения переменных GitLab CI/CD
-- Создает артефакты для следующего stage
-- Длительность: ~1-2 минуты
+Pipeline автоматически выполнит stage генерации конфигурации:
+- Проверит наличие обязательных переменных
+- Сгенерирует конфигурационные файлы
+- Создаст артефакты
 
-#### Stage 2: `node_preparation` (manual)
-- Требует ручного подтверждения (кнопка **Play**)
-- Подключается к деплой ноде
-- Устанавливает необходимые пакеты
-- Настраивает окружение для Ansible
-- Копирует конфигурационные файлы
-- Длительность: ~5-10 минут
+Просмотрите лог выполнения job `generate_configs`.
 
-**Важно:** Stage `node_preparation` настроен как `when: manual` для безопасности. Перед запуском убедитесь, что конфигурация корректна.
+#### Stage 2: node_preparation (manual)
 
-### 4. После успешного выполнения pipeline
+После успешного завершения первого stage:
+1. Нажмите кнопку **Play** (▶) на job `prepare_deploy_node`
+2. Pipeline выполнит подготовку деплой ноды
+3. Дистрибутивы будут автоматически скопированы с runner на деплой ноду
 
-1. **Загрузите дистрибутивы на деплой ноду:**
-   ```bash
-   scp files/*.zip root@10.10.11.41:/pub/corax/files/
-   ```
+### 4. Просмотр артефактов
 
-2. **Подключитесь к деплой ноде:**
-   ```bash
-   ssh root@10.10.11.41
-   ```
+Для просмотра сгенерированных конфигов:
+1. Откройте job `generate_configs`
+2. В правой части нажмите **Browse** или **Download**
+3. Просмотрите содержимое директории `generated_configs/`
 
-3. **Запустите развертывание Corax:**
-   ```bash
-   cd /pub/corax
+### 5. После успешного выполнения Pipeline
 
-   # Шаг 1: Подготовка дистрибутивов
-   ansible-playbook -i inventories/inventory.ini playbook.yaml
+Подключитесь к деплой ноде и запустите развертывание Corax:
 
-   # Шаг 2: Подготовка окружения Corax
-   ansible-playbook -i inventories/inventory.ini prepare_corax.yaml
+```bash
+# Подключение к деплой ноде
+ssh root@10.10.11.41
 
-   # Шаг 3: Развертывание Kafka и Zookeeper
-   ansible-playbook -i inventories/inventory.ini playbooks/kafka-zookeeper-SE.yml -t enabled_service
-   ansible-playbook -i inventories/inventory.ini playbooks/kafka-zookeeper-SE.yml
+# Переход в директорию Corax
+cd /pub/corax
 
-   # Шаг 4: Развертывание Corax Schema Registry
-   ansible-playbook -i inventories/inventory.ini playbooks/crxsr.yml -t root,install,start
+# Проверка структуры
+ls -la
 
-   # Шаг 5: Развертывание Corax UI
-   ansible-playbook -i inventories/inventory.ini playbooks/crxui.yml -t root,install
+# Шаг 1: Подготовка дистрибутивов
+ansible-playbook -i inventories/inventory.ini playbook.yaml
 
-   # Шаг 6: Пост-установочная конфигурация
-   ansible-playbook -i inventories/inventory.ini post_install_corax.yaml
-   ```
+# Шаг 2: Подготовка окружения Corax
+ansible-playbook -i inventories/inventory.ini prepare_corax.yaml
+
+# Шаг 3: Развертывание Kafka и Zookeeper
+ansible-playbook -i inventories/inventory.ini playbooks/kafka-zookeeper-SE.yml -t enabled_service
+ansible-playbook -i inventories/inventory.ini playbooks/kafka-zookeeper-SE.yml
+
+# Шаг 4: Развертывание Corax Schema Registry
+ansible-playbook -i inventories/inventory.ini playbooks/crxsr.yml -t root,install,start
+
+# Шаг 5: Развертывание Corax UI
+ansible-playbook -i inventories/inventory.ini playbooks/crxui.yml -t root,install
+
+# Шаг 6: Пост-установочная конфигурация
+ansible-playbook -i inventories/inventory.ini post_install_corax.yaml
+```
 
 ---
 
 ## Troubleshooting
+
+### Ошибка: "python3 not found" на runner
+
+**Проблема:** На runner не установлен Python 3.
+
+**Решение:**
+```bash
+# Установка на runner
+ssh gitlab-runner@runner-host
+sudo apt-get install -y python3 python3-pip
+```
+
+### Ошибка: "Directory /distribs does not exist"
+
+**Проблема:** Директория с дистрибутивами не найдена на runner.
+
+**Решение:**
+```bash
+ssh gitlab-runner@runner-host
+sudo mkdir -p /distribs
+sudo chown gitlab-runner:gitlab-runner /distribs
+# Скопируйте дистрибутивы в /distribs
+```
 
 ### Ошибка: "SSH connection failed"
 
@@ -383,30 +558,32 @@ Pipeline состоит из 2 stages:
 **Решение:**
 1. Проверьте корректность IP адреса в `DEPLOY_NODE_HOST`
 2. Убедитесь, что публичный ключ добавлен в `~/.ssh/authorized_keys` на деплой ноде
-3. Проверьте, что SSH сервис запущен: `systemctl status sshd`
-4. Проверьте firewall: `iptables -L` или `firewall-cmd --list-all`
-5. Попробуйте подключиться вручную: `ssh root@<DEPLOY_NODE_HOST>`
+3. Проверьте SSH сервис: `systemctl status sshd`
+4. Проверьте firewall
+5. Попробуйте подключиться вручную с runner:
+   ```bash
+   ssh gitlab-runner@runner-host
+   ssh -i ~/.ssh/id_rsa root@<DEPLOY_NODE_HOST>
+   ```
 
-### Ошибка: "apt-get update failed"
+### Ошибка: "apt-get update failed" на деплой ноде
 
 **Проблема:** Не удается обновить список пакетов на ALT Linux.
 
 **Решение:**
-1. Проверьте настройки репозиториев: `cat /etc/apt/sources.list.d/*`
+1. Проверьте настройки репозиториев на деплой ноде
 2. Убедитесь, что нода имеет доступ к интернету или внутренним репозиториям
-3. Проверьте DNS: `ping apt.altlinux.org`
-4. Попробуйте вручную: `apt-get update -v`
+3. Проверьте DNS
+4. Попробуйте вручную: `ssh root@<DEPLOY_NODE_HOST> "apt-get update -v"`
 
 ### Ошибка: "Package not found"
 
-**Проблема:** Не найден пакет (например, `openjdk-17-jdk`).
+**Проблема:** Не найден пакет (например, `java-17-openjdk`).
 
 **Решение:**
 1. Проверьте версию ALT Linux: `cat /etc/altlinux-release`
-2. Для ALT Linux 10.2 пакет может называться иначе:
-   - `openjdk-17-jdk` → `java-17-openjdk`
-   - Проверьте доступные версии: `apt-cache search openjdk`
-3. Обновите pipeline, если необходимо использовать другое имя пакета
+2. Для ALT Linux 10.2 проверьте доступные пакеты: `apt-cache search openjdk`
+3. Обновите список пакетов в `ci/jobs/node_preparation.yml`, если необходимо
 
 ### Ошибка: "Ansible ping failed"
 
@@ -417,6 +594,7 @@ Pipeline состоит из 2 stages:
 2. Проверьте inventory: `cat /pub/corax/inventories/inventory.ini`
 3. Проверьте подключение вручную с деплой ноды:
    ```bash
+   ssh root@<DEPLOY_NODE_HOST>
    ssh -i ~/.ssh/id_rsa root@<WORKER_NODE_IP>
    ```
 4. Проверьте формат переменной `CORAX_NODES` - должен быть валидный JSON
@@ -431,39 +609,45 @@ Pipeline состоит из 2 stages:
 3. Убедитесь, что нет лишних запятых
 4. Пример корректного формата см. в разделе [Примеры конфигурации](#примеры-конфигурации)
 
-### Просмотр логов
+### Ошибка: "Distribs not found"
 
-Все логи выполнения доступны в GitLab:
-1. Перейдите в **CI/CD → Pipelines**
-2. Кликните на номер pipeline
-3. Кликните на job (например, `generate_configs` или `prepare_deploy_node`)
-4. Просмотрите лог выполнения
+**Проблема:** Дистрибутивы не найдены в `/distribs` на runner.
 
-Для просмотра артефактов:
-1. В правой части страницы job нажмите **Browse** или **Download**
-2. Просмотрите сгенерированные конфигурационные файлы
+**Решение:**
+1. Проверьте наличие файлов:
+   ```bash
+   ssh gitlab-runner@runner-host
+   ls -lh /distribs/
+   ```
+2. Убедитесь, что имена файлов соответствуют ожидаемым (с учетом версии KFK)
+3. Если используется другая директория, установите переменную `DISTRIBS_DIR` в GitLab
+
+### Модификация Pipeline
+
+Для изменения логики pipeline отредактируйте соответствующие файлы:
+
+- **Добавить/изменить stage:** `ci/stages.yml`
+- **Изменить переменные:** `ci/variables.yml`
+- **Изменить логику генерации конфигов:** `ci/jobs/config_generation.yml`
+- **Изменить логику подготовки ноды:** `ci/jobs/node_preparation.yml`
+- **Добавить переиспользуемые шаблоны:** `ci/templates.yml`
+
+После изменения закоммитьте и запушьте в репозиторий.
 
 ---
 
 ## Дополнительные ресурсы
 
+- [Документация GitLab Runner](https://docs.gitlab.com/runner/)
+- [Документация GitLab CI/CD](https://docs.gitlab.com/ee/ci/)
 - [Документация ALT Linux](https://www.altlinux.org/)
 - [Документация Ansible](https://docs.ansible.com/)
-- [Документация GitLab CI/CD](https://docs.gitlab.com/ee/ci/)
 - [Apache Kafka Documentation](https://kafka.apache.org/documentation/)
 
 ---
 
-## Контакты и поддержка
-
-При возникновении проблем:
-1. Проверьте раздел [Troubleshooting](#troubleshooting)
-2. Просмотрите логи pipeline в GitLab
-3. Обратитесь к администратору инфраструктуры
-
----
-
-**Версия документа:** 1.0
-**Дата создания:** 2025-01-12
+**Версия документа:** 2.0
+**Дата обновления:** 2025-01-12
 **Целевая платформа:** ALT Linux 10.2
 **Версия Corax:** KFK 11.340.0-16
+**Runner executor:** shell

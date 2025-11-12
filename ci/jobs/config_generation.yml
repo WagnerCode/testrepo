@@ -1,0 +1,330 @@
+# ============================================================================
+# Job: Config Generation
+# Генерация конфигурационных файлов для кластера Corax
+# ============================================================================
+
+generate_configs:
+  stage: config_generation
+  extends:
+    - .common_job
+    - .check_runner_environment
+    - .validate_required_vars
+
+  script:
+    - echo "=========================================="
+    - echo "ГЕНЕРАЦИЯ КОНФИГУРАЦИОННЫХ ФАЙЛОВ"
+    - echo "=========================================="
+    - echo ""
+
+    # Создание рабочей директории
+    - echo "=== Подготовка рабочей директории ==="
+    - rm -rf ${RUNNER_WORKDIR}
+    - mkdir -p ${RUNNER_WORKDIR}/inventories/group_vars
+    - mkdir -p ${RUNNER_WORKDIR}/scripts
+    - echo "✓ Директория создана: ${RUNNER_WORKDIR}"
+    - echo ""
+
+    # Создание Python скрипта для генерации inventory
+    - echo "=== Создание генератора inventory.ini ==="
+    - |
+      cat > ${RUNNER_WORKDIR}/scripts/generate_inventory.py << 'EOFPY'
+      #!/usr/bin/env python3
+      """
+      Генератор inventory.ini из JSON конфигурации нод
+      """
+      import json
+      import os
+      import sys
+
+      def generate_inventory(nodes_json, ansible_user):
+          """Генерация inventory.ini из JSON списка нод"""
+          try:
+              nodes = json.loads(nodes_json)
+          except json.JSONDecodeError as e:
+              print(f"ERROR: Некорректный JSON в CORAX_NODES: {e}", file=sys.stderr)
+              sys.exit(1)
+
+          if not isinstance(nodes, list):
+              print("ERROR: CORAX_NODES должен быть JSON массивом", file=sys.stderr)
+              sys.exit(1)
+
+          # Структура для хранения хостов по ролям
+          roles_hosts = {
+              'kafka': [],
+              'zookeeper': [],
+              'crxsr': [],
+              'crxui': []
+          }
+
+          # Заполнение ролей
+          for node in nodes:
+              name = node.get('name', 'unknown')
+              host = node.get('host', '')
+              user = node.get('user', ansible_user)
+              roles = node.get('roles', [])
+
+              if not host:
+                  print(f"WARNING: Нода {name} не имеет IP адреса", file=sys.stderr)
+                  continue
+
+              host_line = f"{name}       ansible_host={host}         ansible_user={user}"
+
+              for role in roles:
+                  if role in roles_hosts:
+                      roles_hosts[role].append(host_line)
+                  else:
+                      print(f"WARNING: Неизвестная роль '{role}' для ноды {name}", file=sys.stderr)
+
+          # Генерация inventory
+          inventory_content = []
+          for role in ['kafka', 'zookeeper', 'crxsr', 'crxui']:
+              inventory_content.append(f"[{role}]")
+              if roles_hosts[role]:
+                  for host in roles_hosts[role]:
+                      inventory_content.append(host)
+              else:
+                  inventory_content.append(f"# No hosts defined for {role} role")
+              inventory_content.append("")
+
+          return "\n".join(inventory_content)
+
+      if __name__ == "__main__":
+          nodes_json = os.environ.get('CORAX_NODES', '[]')
+          ansible_user = os.environ.get('ANSIBLE_USER', 'user1')
+
+          print("=== Генерация inventory.ini ===", file=sys.stderr)
+          print(f"Ansible user: {ansible_user}", file=sys.stderr)
+
+          inventory = generate_inventory(nodes_json, ansible_user)
+
+          # Подсчет нод
+          nodes = json.loads(nodes_json)
+          print(f"Обработано нод: {len(nodes)}", file=sys.stderr)
+
+          print(inventory)
+      EOFPY
+
+    - chmod +x ${RUNNER_WORKDIR}/scripts/generate_inventory.py
+
+    # Генерация inventory.ini
+    - echo "=== Генерация inventory.ini ==="
+    - python3 ${RUNNER_WORKDIR}/scripts/generate_inventory.py > ${RUNNER_WORKDIR}/inventories/inventory.ini
+    - echo ""
+    - echo "--- Сгенерированный inventory.ini: ---"
+    - cat ${RUNNER_WORKDIR}/inventories/inventory.ini
+    - echo ""
+
+    # Генерация group_vars/all.yaml
+    - echo "=== Генерация group_vars/all.yaml ==="
+    - |
+      cat > ${RUNNER_WORKDIR}/inventories/group_vars/all.yaml << EOFYAML
+      # ============================================================================
+      # Corax Cluster Configuration
+      # Сгенерировано автоматически GitLab CI/CD Pipeline ${CI_PIPELINE_ID}
+      # ============================================================================
+
+      # Временные директории
+      tmp_dir: /tmp/installer
+
+      # Параметры запуска
+      wait_for_start: 20
+      customJavaPath: false
+
+      # Настройки безопасности
+      security: PLAINTEXT__ZK_PLAIN_NO_AUTH__KAFKA_PLAINTEXT_NO_AUTH
+
+      # Пользователи и группы
+      kafka_user: kafka
+      kafka_group: kafka
+      zookeeper_user: kafka
+      zookeeper_group: kafka
+
+      # Настройки сервисов
+      enabled_service: true
+
+      # ============================================================================
+      # Kafka Configuration
+      # ============================================================================
+      kafka:
+        distr: distrib.zip
+        installdir: ${KAFKA_INSTALL_DIR}
+        logdir: ${KAFKA_INSTALL_DIR}/logs
+        datadir: ${KAFKA_DATA_DIR}
+        cleanLog: false
+        cleanData: false
+
+      # ============================================================================
+      # Zookeeper Configuration
+      # ============================================================================
+      zookeeper:
+        distr: distrib.zip
+        installdir: ${KAFKA_INSTALL_DIR}
+        logdir: ${KAFKA_INSTALL_DIR}/logs
+        datadir: ${ZOOKEEPER_DATA_DIR}
+        cleanLog: false
+        cleanData: false
+
+      # ============================================================================
+      # Corax Schema Registry Configuration
+      # ============================================================================
+      crxsr:
+        distr: distrib.zip
+        installdir: ${KAFKA_INSTALL_DIR}
+        cleanLog: false
+        prop_var:
+          "server_port": ${CRXSR_PORT}
+
+      # ============================================================================
+      # Corax UI Configuration
+      # ============================================================================
+      crxui:
+        distr: distrib.zip
+        installdir: ${KAFKA_INSTALL_DIR}
+        cleanLog: false
+        cleanData: false
+        server.port: ${CRXUI_PORT}
+      EOFYAML
+
+    - echo "✓ Файл group_vars/all.yaml создан"
+    - echo ""
+    - echo "--- Содержимое group_vars/all.yaml: ---"
+    - cat ${RUNNER_WORKDIR}/inventories/group_vars/all.yaml
+    - echo ""
+
+    # Генерация inventory для bootstrap (начальная настройка деплой ноды)
+    - echo "=== Генерация inventory_bootstrap.ini ==="
+    - |
+      cat > ${RUNNER_WORKDIR}/inventory_bootstrap.ini << EOFINV
+      # Inventory для начальной подготовки деплой ноды
+      # Сгенерировано: $(date -Iseconds)
+
+      [deploy_node]
+      deploy-node ansible_host=${DEPLOY_NODE_HOST} ansible_user=${DEPLOY_NODE_USER}
+      EOFINV
+
+    - echo "✓ Файл inventory_bootstrap.ini создан"
+    - cat ${RUNNER_WORKDIR}/inventory_bootstrap.ini
+    - echo ""
+
+    # Копирование SSH ключа
+    - echo "=== Подготовка SSH ключа ==="
+    - cp "$SSH_PRIVATE_KEY" ${RUNNER_WORKDIR}/ssh_private_key
+    - chmod 600 ${RUNNER_WORKDIR}/ssh_private_key
+    - echo "✓ SSH ключ скопирован"
+    - echo ""
+
+    # Генерация ansible.cfg
+    - echo "=== Генерация ansible.cfg ==="
+    - |
+      cat > ${RUNNER_WORKDIR}/ansible.cfg << EOFCFG
+      [defaults]
+      roles_path = ./roles
+      host_key_checking = False
+      remote_user = ${ANSIBLE_USER}
+      private_key_file = ./ssh_private_key
+      stdout_callback = ${ANSIBLE_STDOUT_CALLBACK}
+      force_color = ${ANSIBLE_FORCE_COLOR}
+
+      [inventory]
+      enable_plugins = script, ini, yaml
+
+      [ssh_connection]
+      pipelining = True
+      ssh_args = -o ControlMaster=auto -o ControlPersist=60s
+      EOFCFG
+
+    - echo "✓ Файл ansible.cfg создан"
+    - cat ${RUNNER_WORKDIR}/ansible.cfg
+    - echo ""
+
+    # Создание манифеста конфигурации
+    - echo "=== Создание манифеста конфигурации ==="
+    - |
+      cat > ${RUNNER_WORKDIR}/config_manifest.json << EOFJSON
+      {
+        "generated_at": "$(date -Iseconds)",
+        "pipeline_id": "${CI_PIPELINE_ID}",
+        "pipeline_url": "${CI_PIPELINE_URL}",
+        "commit_sha": "${CI_COMMIT_SHA}",
+        "commit_ref": "${CI_COMMIT_REF_NAME}",
+        "runner_description": "${CI_RUNNER_DESCRIPTION}",
+        "deploy_node_host": "${DEPLOY_NODE_HOST}",
+        "deploy_node_user": "${DEPLOY_NODE_USER}",
+        "ansible_user": "${ANSIBLE_USER}",
+        "kfk_version": "${KFK_VERSION}",
+        "corax_dir": "${CORAX_DIR}",
+        "kafka_install_dir": "${KAFKA_INSTALL_DIR}",
+        "kafka_data_dir": "${KAFKA_DATA_DIR}",
+        "zookeeper_data_dir": "${ZOOKEEPER_DATA_DIR}",
+        "crxui_port": ${CRXUI_PORT},
+        "crxsr_port": ${CRXSR_PORT},
+        "distribs_dir": "${DISTRIBS_DIR}"
+      }
+      EOFJSON
+
+    - echo "✓ Манифест создан"
+    - echo ""
+    - echo "--- Манифест конфигурации: ---"
+    - cat ${RUNNER_WORKDIR}/config_manifest.json | jq .
+    - echo ""
+
+    # Создание README для конфигов
+    - echo "=== Создание README для конфигов ==="
+    - |
+      cat > ${RUNNER_WORKDIR}/README.md << EOFREADME
+      # Сгенерированные конфигурационные файлы Corax
+
+      **Pipeline ID:** ${CI_PIPELINE_ID}
+      **Дата генерации:** $(date -Iseconds)
+      **Commit:** ${CI_COMMIT_SHA}
+
+      ## Структура файлов
+
+      \`\`\`
+      .
+      ├── inventories/
+      │   ├── inventory.ini           # Inventory для Corax кластера
+      │   └── group_vars/
+      │       └── all.yaml            # Конфигурация компонентов
+      ├── inventory_bootstrap.ini     # Inventory для деплой ноды
+      ├── ansible.cfg                 # Конфигурация Ansible
+      ├── ssh_private_key             # SSH ключ для доступа
+      ├── config_manifest.json        # Манифест конфигурации
+      └── README.md                   # Этот файл
+      \`\`\`
+
+      ## Параметры конфигурации
+
+      - **Деплой нода:** ${DEPLOY_NODE_HOST}
+      - **Версия KFK:** ${KFK_VERSION}
+      - **Директория Corax:** ${CORAX_DIR}
+      - **Порт CRXUI:** ${CRXUI_PORT}
+      - **Порт CRXSR:** ${CRXSR_PORT}
+
+      ## Использование
+
+      Эти файлы будут автоматически скопированы на деплой ноду в stage \`node_preparation\`.
+      EOFREADME
+
+    - echo "✓ README создан"
+    - echo ""
+
+    # Итоговая информация
+    - echo "=========================================="
+    - echo "ГЕНЕРАЦИЯ КОНФИГУРАЦИИ ЗАВЕРШЕНА"
+    - echo "=========================================="
+    - echo ""
+    - echo "Сгенерированные файлы:"
+    - find ${RUNNER_WORKDIR} -type f -exec ls -lh {} \;
+    - echo ""
+    - echo "✓ Конфигурационные файлы готовы к использованию"
+    - echo ""
+
+  artifacts:
+    name: "corax-configs-${CI_PIPELINE_ID}"
+    paths:
+      - ${RUNNER_WORKDIR}/
+    expire_in: 1 week
+
+  only:
+    - branches

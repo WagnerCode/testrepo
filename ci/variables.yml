@@ -1,0 +1,39 @@
+# ============================================================================
+# GitLab CI/CD Variables
+# Глобальные переменные для pipeline
+# ============================================================================
+
+variables:
+  # === Переменные по умолчанию ===
+
+  # Пользователи
+  DEPLOY_NODE_USER: "root"
+  ANSIBLE_USER: "user1"
+
+  # Пути на целевых нодах
+  KAFKA_INSTALL_DIR: "/pub/opt/Apache/kafka"
+  KAFKA_DATA_DIR: "/pub/KAFKADATA"
+  ZOOKEEPER_DATA_DIR: "/pub/zookeeper"
+  CORAX_DIR: "/pub/corax"
+  TMP_DIR: "/pub/corax/tmp"
+
+  # Порты сервисов
+  CRXUI_PORT: "9090"
+  CRXSR_PORT: "8081"
+
+  # Версия дистрибутива
+  KFK_VERSION: "11.340.0-16"
+
+  # === Пути на GitLab Runner ===
+
+  # Директория с дистрибутивами на runner (shell executor)
+  DISTRIBS_DIR: "/distribs"
+
+  # Рабочая директория на runner для сгенерированных конфигов
+  RUNNER_WORKDIR: "${CI_PROJECT_DIR}/generated_configs"
+
+  # === Ansible настройки ===
+
+  ANSIBLE_HOST_KEY_CHECKING: "False"
+  ANSIBLE_FORCE_COLOR: "True"
+  ANSIBLE_STDOUT_CALLBACK: "yaml"
