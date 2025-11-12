@@ -1,6 +1,6 @@
 # ============================================================================
 # Job: Config Generation
-# Распаковка архива Corax и генерация конфигурационных файлов
+# Генерация только конфигурационных файлов (без распаковки архива)
 # ============================================================================
 
 generate_configs:
@@ -13,33 +13,21 @@ generate_configs:
 
   script:
     - echo "=========================================="
-    - echo "ПОДГОТОВКА СТРУКТУРЫ CORAX"
+    - echo "ГЕНЕРАЦИЯ КОНФИГУРАЦИОННЫХ ФАЙЛОВ"
     - echo "=========================================="
     - echo ""
 
-    # Очистка и создание рабочей директории
-    - echo "=== Подготовка рабочей директории ==="
+    # Создание директории для конфигов
+    - echo "=== Подготовка директории для конфигов ==="
     - rm -rf ${RUNNER_WORKDIR}
     - mkdir -p ${RUNNER_WORKDIR}
-    - echo "✓ Рабочая директория создана: ${RUNNER_WORKDIR}"
-    - echo ""
-
-    # Распаковка архива Corax
-    - echo "=== Распаковка архива ${CORAX_ARCHIVE} ==="
-    - |
-      cd ${RUNNER_WORKDIR}
-      unzip -q ${DISTRIBS_DIR}/${CORAX_ARCHIVE}
-      echo "✓ Архив распакован"
-    - echo ""
-    - echo "--- Структура распакованного архива: ---"
-    - tree -L 2 ${RUNNER_WORKDIR} || ls -laR ${RUNNER_WORKDIR} | head -50
+    - echo "✓ Директория создана: ${RUNNER_WORKDIR}"
     - echo ""
 
     # Создание Python скрипта для генерации inventory
     - echo "=== Создание генератора inventory.ini ==="
-    - mkdir -p ${RUNNER_WORKDIR}/scripts
     - |
-      cat > ${RUNNER_WORKDIR}/scripts/generate_inventory.py << 'EOFPY'
+      cat > ${RUNNER_WORKDIR}/generate_inventory.py << 'EOFPY'
       #!/usr/bin/env python3
       """
       Генератор inventory.ini из JSON конфигурации нод
@@ -116,22 +104,21 @@ generate_configs:
           print(inventory)
       EOFPY
 
-    - chmod +x ${RUNNER_WORKDIR}/scripts/generate_inventory.py
-    - echo "✓ Генератор inventory создан"
+    - chmod +x ${RUNNER_WORKDIR}/generate_inventory.py
+    - echo "✓ Генератор создан"
     - echo ""
 
     # Генерация inventory.ini
     - echo "=== Генерация inventory.ini ==="
-    - python3 ${RUNNER_WORKDIR}/scripts/generate_inventory.py > ${RUNNER_WORKDIR}/inventory.ini
+    - python3 ${RUNNER_WORKDIR}/generate_inventory.py > ${RUNNER_WORKDIR}/inventory.ini
     - echo ""
     - echo "--- Сгенерированный inventory.ini: ---"
     - cat ${RUNNER_WORKDIR}/inventory.ini
     - echo ""
-    - echo "✓ Файл inventory.ini сгенерирован и заменен в структуре"
-    - echo ""
 
     # Генерация group_vars/all.yaml
     - echo "=== Генерация group_vars/all.yaml ==="
+    - mkdir -p ${RUNNER_WORKDIR}/group_vars
     - |
       cat > ${RUNNER_WORKDIR}/group_vars/all.yaml << EOFYAML
       # ============================================================================
@@ -202,9 +189,9 @@ generate_configs:
         server.port: ${CRXUI_PORT}
       EOFYAML
 
-    - echo "✓ Файл group_vars/all.yaml сгенерирован и заменен в структуре"
+    - echo "✓ Файл group_vars/all.yaml сгенерирован"
     - echo ""
-    - echo "--- Сгенерированный group_vars/all.yaml: ---"
+    - echo "--- Содержимое group_vars/all.yaml: ---"
     - cat ${RUNNER_WORKDIR}/group_vars/all.yaml
     - echo ""
 
@@ -212,11 +199,11 @@ generate_configs:
     - echo "=== Подготовка SSH ключа ==="
     - cp "$SSH_PRIVATE_KEY" ${RUNNER_WORKDIR}/ssh_private_key
     - chmod 600 ${RUNNER_WORKDIR}/ssh_private_key
-    - echo "✓ SSH ключ добавлен в структуру"
+    - echo "✓ SSH ключ подготовлен"
     - echo ""
 
-    # Обновление ansible.cfg
-    - echo "=== Обновление ansible.cfg ==="
+    # Генерация ansible.cfg
+    - echo "=== Генерация ansible.cfg ==="
     - |
       cat > ${RUNNER_WORKDIR}/ansible.cfg << EOFCFG
       [defaults]
@@ -235,7 +222,7 @@ generate_configs:
       ssh_args = -o ControlMaster=auto -o ControlPersist=60s
       EOFCFG
 
-    - echo "✓ Файл ansible.cfg обновлен"
+    - echo "✓ Файл ansible.cfg сгенерирован"
     - cat ${RUNNER_WORKDIR}/ansible.cfg
     - echo ""
 
@@ -251,6 +238,7 @@ generate_configs:
         "commit_ref": "${CI_COMMIT_REF_NAME}",
         "runner_description": "${CI_RUNNER_DESCRIPTION}",
         "source_archive": "${CORAX_ARCHIVE}",
+        "archive_location": "${DISTRIBS_DIR}/${CORAX_ARCHIVE}",
         "deploy_node_host": "${DEPLOY_NODE_HOST}",
         "deploy_node_user": "${DEPLOY_NODE_USER}",
         "ansible_user": "${ANSIBLE_USER}",
@@ -270,24 +258,19 @@ generate_configs:
     - cat ${RUNNER_WORKDIR}/config_manifest.json | jq .
     - echo ""
 
-    # Проверка содержимого дистрибутивов в архиве
-    - echo "=== Проверка дистрибутивов в директории files/ ==="
-    - ls -lh ${RUNNER_WORKDIR}/files/ || echo "WARNING: Директория files/ не найдена"
-    - echo ""
-
-    # Финальная структура
+    # Итоговая информация
     - echo "=========================================="
-    - echo "ПОДГОТОВКА ЗАВЕРШЕНА"
+    - echo "ГЕНЕРАЦИЯ ЗАВЕРШЕНА"
     - echo "=========================================="
     - echo ""
-    - echo "Итоговая структура Corax:"
-    - tree -L 2 ${RUNNER_WORKDIR} || ls -la ${RUNNER_WORKDIR}
+    - echo "Сгенерированные конфигурационные файлы:"
+    - ls -lh ${RUNNER_WORKDIR}/
     - echo ""
-    - echo "✓ Структура Corax подготовлена и готова к развертыванию"
+    - echo "✓ Конфиги готовы для развертывания"
     - echo ""
 
   artifacts:
-    name: "corax-prepared-${CI_PIPELINE_ID}"
+    name: "corax-configs-${CI_PIPELINE_ID}"
     paths:
       - ${RUNNER_WORKDIR}/
     expire_in: 1 week

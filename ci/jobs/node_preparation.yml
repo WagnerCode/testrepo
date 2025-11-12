@@ -1,6 +1,6 @@
 # ============================================================================
 # Job: Node Preparation
-# Подготовка деплой ноды и развертывание структуры Corax
+# Подготовка деплой ноды: копирование архива, распаковка, настройка конфигов
 # ============================================================================
 
 prepare_deploy_node:
@@ -22,6 +22,7 @@ prepare_deploy_node:
     - echo "Деплой нода: ${DEPLOY_NODE_HOST}"
     - echo "Пользователь: ${DEPLOY_NODE_USER}"
     - echo "Целевая директория: ${CORAX_DIR}"
+    - echo "Архив: ${DISTRIBS_DIR}/${CORAX_ARCHIVE}"
     - echo ""
 
     # === Проверка SSH доступа ===
@@ -79,7 +80,6 @@ prepare_deploy_node:
         curl
         wget
         sudo
-        rsync
         tree
       )
 
@@ -96,6 +96,7 @@ prepare_deploy_node:
       echo "Java: $(java -version 2>&1 | head -1)"
       echo "JQ: $(jq --version 2>&1)"
       echo "Git: $(git --version 2>&1)"
+      echo "Unzip: $(unzip -v 2>&1 | head -1)"
 
       echo ""
       echo "✓ Все необходимые пакеты успешно установлены"
@@ -103,48 +104,128 @@ prepare_deploy_node:
 
     - echo ""
 
-    # === Создание директории Corax ===
+    # === Подготовка директории на деплой ноде ===
     - echo "=== Подготовка директории ${CORAX_DIR} на деплой ноде ==="
     - |
       ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
         ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST} bash << EOFREMOTE
       set -e
 
-      # Удаление старой директории если существует (для чистого деплоя)
+      # Backup старой директории если существует
       if [ -d "${CORAX_DIR}" ]; then
+        BACKUP_DIR="${CORAX_DIR}.backup.$(date +%Y%m%d_%H%M%S)"
         echo "WARNING: Директория ${CORAX_DIR} уже существует"
-        echo "Создание резервной копии..."
-        mv ${CORAX_DIR} ${CORAX_DIR}.backup.$(date +%Y%m%d_%H%M%S) || {
+        echo "Создание резервной копии: \${BACKUP_DIR}"
+        mv ${CORAX_DIR} \${BACKUP_DIR} || {
           echo "WARNING: Не удалось создать backup, удаляем директорию..."
           rm -rf ${CORAX_DIR}
         }
       fi
 
-      # Создание директории
-      mkdir -p ${CORAX_DIR}
-      echo "✓ Директория ${CORAX_DIR} подготовлена"
+      # Создание родительской директории
+      mkdir -p $(dirname ${CORAX_DIR})
+      echo "✓ Родительская директория подготовлена"
       EOFREMOTE
 
     - echo ""
 
-    # === Копирование подготовленной структуры Corax ===
-    - echo "=== Копирование структуры Corax на деплой ноду ==="
-    - echo "Источник: ${RUNNER_WORKDIR}/"
-    - echo "Назначение: ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:${CORAX_DIR}/"
+    # === Копирование архива на деплой ноду ===
+    - echo "=== Копирование архива ${CORAX_ARCHIVE} на деплой ноду ==="
+    - echo "Источник: ${DISTRIBS_DIR}/${CORAX_ARCHIVE}"
+    - echo "Назначение: ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:/tmp/${CORAX_ARCHIVE}"
     - echo ""
     - |
-      echo "Копирование файлов через rsync..."
-      rsync -avz --progress \
-        -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
-        ${RUNNER_WORKDIR}/ \
-        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:${CORAX_DIR}/
+      echo "Копирование архива..."
+      scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+        ${DISTRIBS_DIR}/${CORAX_ARCHIVE} \
+        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:/tmp/${CORAX_ARCHIVE}
 
       echo ""
-      echo "✓ Структура Corax успешно скопирована"
+      echo "✓ Архив скопирован на деплой ноду"
     - echo ""
 
-    # === Проверка скопированной структуры ===
-    - echo "=== Проверка скопированной структуры на деплой ноде ==="
+    # === Распаковка архива на деплой ноде ===
+    - echo "=== Распаковка архива на деплой ноде ==="
+    - |
+      ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST} bash << EOFREMOTE
+      set -e
+
+      echo "Распаковка /tmp/${CORAX_ARCHIVE}..."
+      cd $(dirname ${CORAX_DIR})
+
+      # Распаковка архива
+      unzip -q /tmp/${CORAX_ARCHIVE}
+
+      # Проверка что архив создал директорию corax_prepare
+      if [ ! -d "corax_prepare" ]; then
+        echo "✗ ERROR: Архив не создал директорию corax_prepare!"
+        echo "Проверьте структуру архива"
+        exit 1
+      fi
+
+      # Переименование в ${CORAX_DIR}
+      mv corax_prepare $(basename ${CORAX_DIR})
+
+      echo "✓ Архив распакован в ${CORAX_DIR}"
+
+      # Удаление временного архива
+      rm -f /tmp/${CORAX_ARCHIVE}
+      echo "✓ Временный архив удален"
+
+      # Проверка структуры
+      echo ""
+      echo "--- Структура распакованной директории: ---"
+      tree -L 2 ${CORAX_DIR} 2>/dev/null || ls -la ${CORAX_DIR}
+      EOFREMOTE
+
+    - echo ""
+
+    # === Копирование сгенерированных конфигов ===
+    - echo "=== Копирование сгенерированных конфигурационных файлов ==="
+    - echo "Замена конфигов из артефактов CI/CD..."
+    - echo ""
+
+    # Копирование inventory.ini
+    - |
+      echo "Копирование inventory.ini..."
+      scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+        ${RUNNER_WORKDIR}/inventory.ini \
+        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:${CORAX_DIR}/inventory.ini
+      echo "✓ inventory.ini скопирован"
+
+    # Копирование group_vars/all.yaml
+    - |
+      echo "Копирование group_vars/all.yaml..."
+      scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+        ${RUNNER_WORKDIR}/group_vars/all.yaml \
+        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:${CORAX_DIR}/group_vars/all.yaml
+      echo "✓ group_vars/all.yaml скопирован"
+
+    # Копирование ansible.cfg
+    - |
+      echo "Копирование ansible.cfg..."
+      scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+        ${RUNNER_WORKDIR}/ansible.cfg \
+        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:${CORAX_DIR}/ansible.cfg
+      echo "✓ ansible.cfg скопирован"
+
+    # Копирование SSH ключа
+    - |
+      echo "Копирование SSH ключа..."
+      scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+        ${RUNNER_WORKDIR}/ssh_private_key \
+        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:${CORAX_DIR}/ssh_private_key
+      ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST} "chmod 600 ${CORAX_DIR}/ssh_private_key"
+      echo "✓ SSH ключ скопирован"
+
+    - echo ""
+    - echo "✓ Все конфигурационные файлы заменены"
+    - echo ""
+
+    # === Проверка финальной структуры ===
+    - echo "=== Проверка финальной структуры на деплой ноде ==="
     - |
       ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
         ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST} bash << EOFREMOTE
@@ -164,20 +245,24 @@ prepare_deploy_node:
         "inventory.ini"
         "group_vars/all.yaml"
         "ssh_private_key"
+        "files/prepare.sh"
+        "files/prepare_corax.yaml"
+        "files/post_install_corax.yaml"
       )
 
       for FILE in "\${FILES_TO_CHECK[@]}"; do
-        if [ -f "\${FILE}" ]; then
-          echo "✓ \${FILE} ($(stat -c%s \${FILE} 2>/dev/null || stat -f%z \${FILE} 2>/dev/null || echo '?' ) bytes)"
+        if [ -e "\${FILE}" ]; then
+          SIZE=\$(stat -c%s "\${FILE}" 2>/dev/null || stat -f%z "\${FILE}" 2>/dev/null || echo '?')
+          echo "✓ \${FILE} (\${SIZE} bytes)"
         else
           echo "✗ WARNING: \${FILE} не найден!"
         fi
       done
 
       echo ""
-      echo "--- Проверка директории files/: ---"
+      echo "--- Проверка директории files/ (дистрибутивы): ---"
       if [ -d "files/" ]; then
-        ls -lh files/ | head -10
+        ls -lh files/*.zip 2>/dev/null || echo "WARNING: ZIP файлы не найдены в files/"
         echo "✓ Директория files/ найдена"
       else
         echo "✗ WARNING: Директория files/ не найдена!"
@@ -290,7 +375,6 @@ prepare_deploy_node:
         echo ""
         echo "WARNING: Ansible ping не прошел успешно"
         echo "Это ожидаемо, если SSH ключи еще не распространены на рабочие ноды"
-        echo "Или если рабочие ноды еще не готовы"
       }
 
       echo ""
@@ -303,6 +387,11 @@ prepare_deploy_node:
     - echo "=========================================="
     - echo "ПОДГОТОВКА ДЕПЛОЙ НОДЫ ЗАВЕРШЕНА"
     - echo "=========================================="
+    - echo ""
+    - echo "✓ Архив corax_prepare.zip скопирован с runner"
+    - echo "✓ Архив распакован в ${CORAX_DIR}"
+    - echo "✓ Конфигурационные файлы заменены из CI/CD"
+    - echo "✓ SSH ключи настроены"
     - echo ""
     - echo "Следующие шаги для развертывания Corax:"
     - echo ""
