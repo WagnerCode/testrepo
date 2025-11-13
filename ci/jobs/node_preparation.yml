@@ -7,9 +7,11 @@ prepare_deploy_node:
   stage: node_preparation
   extends:
     - .common_job
-    - .check_runner_environment
-    - .validate_required_vars
-    - .setup_ssh
+
+  before_script:
+    - !reference [.check_runner_environment, before_script]
+    - !reference [.validate_required_vars, before_script]
+    - !reference [.setup_ssh, before_script]
 
   dependencies:
     - generate_configs
