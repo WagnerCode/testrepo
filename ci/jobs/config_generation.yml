@@ -6,15 +6,9 @@
 generate_configs:
   stage: config_generation
   extends:
-    - .common_job
+    - .config_generation_template
 
   script:
-    # === Выполнение всех проверок ===
-    - !reference [.check_runner_environment, before_script]
-    - !reference [.validate_required_vars, before_script]
-    - !reference [.check_corax_archive, before_script]
-
-    # === Основная работа джобы ===
     - echo "=========================================="
     - echo "ГЕНЕРАЦИЯ КОНФИГУРАЦИОННЫХ ФАЙЛОВ"
     - echo "=========================================="
