@@ -17,7 +17,7 @@ generate_configs:
     - echo "=== Подготовка директории для конфигов ==="
     - rm -rf ${RUNNER_WORKDIR}
     - mkdir -p ${RUNNER_WORKDIR}
-    - echo "✓ Директория создана: ${RUNNER_WORKDIR}"
+    - echo "✓ Директория создана - ${RUNNER_WORKDIR}"
     - echo ""
 
     # Создание Python скрипта для генерации inventory

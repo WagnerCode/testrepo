@@ -15,15 +15,21 @@
 
 # === Комбинированный шаблон для config_generation ===
 .config_generation_template:
-  extends: .common_job
+  tags:
+    - shell
+  retry:
+    max: 1
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
   before_script:
     # Проверка окружения runner
     - echo "=== Проверка окружения GitLab Runner (shell executor) ==="
-    - echo "Runner:${CI_RUNNER_DESCRIPTION}"
-    - echo "Project:${CI_PROJECT_NAME}"
-    - echo "Pipeline ID:${CI_PIPELINE_ID}"
-    - echo "Current User:$(whoami)"
-    - echo "Current Directory:$(pwd)"
+    - echo "Runner: ${CI_RUNNER_DESCRIPTION}"
+    - echo "Project: ${CI_PROJECT_NAME}"
+    - echo "Pipeline ID: ${CI_PIPELINE_ID}"
+    - echo "Current User: $(whoami)"
+    - echo "Current Directory: $(pwd)"
     - echo ""
     - echo "--- Проверка необходимых утилит ---"
     - which python3 || (echo "ERROR:python3 not found" && exit 1)
@@ -69,9 +75,9 @@
     - echo ""
     # Проверка архива
     - echo "=== Проверка наличия архива Corax на runner ==="
-    - echo "Директория:${DISTRIBS_DIR}"
-    - echo "Архив:${CORAX_ARCHIVE}"
-    - echo "Полный путь:${DISTRIBS_DIR}/${CORAX_ARCHIVE}"
+    - echo "Директория: ${DISTRIBS_DIR}"
+    - echo "Архив: ${CORAX_ARCHIVE}"
+    - echo "Полный путь: ${DISTRIBS_DIR}/${CORAX_ARCHIVE}"
     - echo ""
     - |
       if [ ! -d "${DISTRIBS_DIR}" ]; then
@@ -98,7 +104,7 @@
         echo "Разместите архив: scp corax_prepare.zip runner-host:${DISTRIBS_DIR}/"
         exit 1
       fi
-    - echo "✓ Архив найден:${CORAX_ARCHIVE}"
+    - echo "✓ Архив найден: ${CORAX_ARCHIVE}"
     - du -h ${DISTRIBS_DIR}/${CORAX_ARCHIVE}
     - echo ""
     - |
@@ -119,15 +125,21 @@
 
 # === Комбинированный шаблон для node_preparation ===
 .node_preparation_template:
-  extends: .common_job
+  tags:
+    - shell
+  retry:
+    max: 1
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
   before_script:
     # Проверка окружения runner
     - echo "=== Проверка окружения GitLab Runner (shell executor) ==="
-    - echo "Runner:${CI_RUNNER_DESCRIPTION}"
-    - echo "Project:${CI_PROJECT_NAME}"
-    - echo "Pipeline ID:${CI_PIPELINE_ID}"
-    - echo "Current User:$(whoami)"
-    - echo "Current Directory:$(pwd)"
+    - echo "Runner: ${CI_RUNNER_DESCRIPTION}"
+    - echo "Project: ${CI_PROJECT_NAME}"
+    - echo "Pipeline ID: ${CI_PIPELINE_ID}"
+    - echo "Current User: $(whoami)"
+    - echo "Current Directory: $(pwd)"
     - echo ""
     - echo "--- Проверка необходимых утилит ---"
     - which python3 || (echo "ERROR:python3 not found" && exit 1)

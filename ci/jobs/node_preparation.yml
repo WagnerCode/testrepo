@@ -15,10 +15,10 @@ prepare_deploy_node:
     - echo "ПОДГОТОВКА ДЕПЛОЙ НОДЫ"
     - echo "=========================================="
     - echo ""
-    - echo "Деплой нода: ${DEPLOY_NODE_HOST}"
-    - echo "Пользователь: ${DEPLOY_NODE_USER}"
-    - echo "Целевая директория: ${CORAX_DIR}"
-    - echo "Архив: ${DISTRIBS_DIR}/${CORAX_ARCHIVE}"
+    - echo "Деплой нода - ${DEPLOY_NODE_HOST}"
+    - echo "Пользователь - ${DEPLOY_NODE_USER}"
+    - echo "Целевая директория - ${CORAX_DIR}"
+    - echo "Архив - ${DISTRIBS_DIR}/${CORAX_ARCHIVE}"
     - echo ""
 
     # === Проверка SSH доступа ===
@@ -127,8 +127,8 @@ prepare_deploy_node:
 
     # === Копирование архива на деплой ноду ===
     - echo "=== Копирование архива ${CORAX_ARCHIVE} на деплой ноду ==="
-    - echo "Источник: ${DISTRIBS_DIR}/${CORAX_ARCHIVE}"
-    - echo "Назначение: ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:/tmp/${CORAX_ARCHIVE}"
+    - echo "Источник - ${DISTRIBS_DIR}/${CORAX_ARCHIVE}"
+    - echo "Назначение - ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:/tmp/${CORAX_ARCHIVE}"
     - echo ""
     - |
       echo "Копирование архива..."
