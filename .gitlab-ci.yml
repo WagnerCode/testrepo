@@ -1,0 +1,51 @@
+# ============================================================================
+# GitLab CI/CD Pipeline для деплоя кластера Corax на ALT Linux 10.2
+# ============================================================================
+#
+# Структура pipeline:
+#   - config_generation: Генерация конфигурационных файлов
+#   - node_preparation: Подготовка деплой ноды и копирование дистрибутивов
+#
+# Требуемые переменные GitLab CI/CD (Settings → CI/CD → Variables):
+#   - DEPLOY_NODE_HOST: IP адрес деплой ноды (например: 10.10.11.41)
+#   - SSH_PRIVATE_KEY: Приватный SSH ключ для доступа (type: File)
+#   - CORAX_NODES: JSON массив с описанием нод кластера
+#
+# Пример CORAX_NODES:
+#   [
+#     {
+#       "name": "corax-node1",
+#       "host": "10.10.11.42",
+#       "user": "root",
+#       "roles": ["kafka", "zookeeper"]
+#     },
+#     {
+#       "name": "corax-node2",
+#       "host": "10.10.11.43",
+#       "user": "root",
+#       "roles": ["kafka", "zookeeper", "crxsr", "crxui"]
+#     }
+#   ]
+#
+# Опциональные переменные (имеют значения по умолчанию):
+#   - DEPLOY_NODE_USER: Пользователь деплой ноды (default: root)
+#   - ANSIBLE_USER: Пользователь для ansible (default: user1)
+#   - KAFKA_INSTALL_DIR, KAFKA_DATA_DIR, ZOOKEEPER_DATA_DIR
+#   - CRXUI_PORT, CRXSR_PORT, KFK_VERSION
+#   - DISTRIBS_DIR: Директория с дистрибутивами на runner (default: /distribs)
+#
+# Runner requirements:
+#   - Executor: shell
+#   - Утилиты: python3, jq, ssh, scp
+#   - Дистрибутивы Corax в директории /distribs (или кастомной DISTRIBS_DIR)
+#
+# Документация: см. GITLAB_SETUP.md
+# ============================================================================
+
+# Включение модулей конфигурации
+include:
+  - local: 'ci/stages.yml'      # Определение stages
+  - local: 'ci/variables.yml'   # Глобальные переменные
+  - local: 'ci/templates.yml'   # Переиспользуемые шаблоны
+  - local: 'ci/jobs/config_generation.yml'  # Job генерации конфигов
+  - local: 'ci/jobs/node_preparation.yml'   # Job подготовки ноды

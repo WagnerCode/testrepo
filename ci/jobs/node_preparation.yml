@@ -1,0 +1,420 @@
+# ============================================================================
+# Job: Node Preparation
+# Подготовка деплой ноды: копирование архива, распаковка, настройка конфигов
+# ============================================================================
+
+prepare_deploy_node:
+  stage: node_preparation
+  extends: .node_preparation_template
+
+  dependencies:
+    - generate_configs
+
+  script:
+    - echo "=========================================="
+    - echo "ПОДГОТОВКА ДЕПЛОЙ НОДЫ"
+    - echo "=========================================="
+    - echo ""
+    - echo "Деплой нода - ${DEPLOY_NODE_HOST}"
+    - echo "Пользователь - ${DEPLOY_NODE_USER}"
+    - echo "Целевая директория - ${CORAX_DIR}"
+    - echo "Архив - ${DISTRIBS_DIR}/${CORAX_ARCHIVE}"
+    - echo ""
+
+    # === Проверка SSH доступа ===
+    - echo "=== Проверка SSH доступа к деплой ноде ==="
+    - ssh-keyscan -H ${DEPLOY_NODE_HOST} >> ~/.ssh/known_hosts 2>/dev/null || true
+    - |
+      if ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
+         ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST} "echo 'SSH connection successful'"; then
+        echo "✓ SSH доступ к деплой ноде установлен"
+      else
+        echo "✗ ERROR: Не удалось подключиться к деплой ноде ${DEPLOY_NODE_HOST}"
+        echo ""
+        echo "Проверьте:"
+        echo "  1. Корректность IP адреса в переменной DEPLOY_NODE_HOST"
+        echo "  2. Корректность SSH ключа в переменной SSH_PRIVATE_KEY"
+        echo "  3. Наличие публичного ключа в ~/.ssh/authorized_keys на целевой ноде"
+        echo "  4. Доступность ноды по сети (ping, firewall)"
+        exit 1
+      fi
+    - echo ""
+
+    # === Установка пакетов на деплой ноде ===
+    - echo "=== Установка необходимых пакетов на деплой ноде ==="
+    - |
+      ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST} bash << 'EOFREMOTE'
+      set -e
+
+      echo "--- Проверка версии ОС ---"
+      if [ -f /etc/altlinux-release ]; then
+        cat /etc/altlinux-release
+      else
+        echo "WARNING: Это не ALT Linux! Файл /etc/altlinux-release не найден"
+        cat /etc/os-release 2>/dev/null || echo "Информация об ОС недоступна"
+      fi
+
+      echo ""
+      echo "--- Обновление списка пакетов ---"
+      apt-get update -q || {
+        echo "WARNING: apt-get update завершился с предупреждениями"
+      }
+
+      echo ""
+      echo "--- Установка базовых пакетов ---"
+      # Список пакетов для ALT Linux
+      PACKAGES=(
+        ansible
+        unzip
+        sshpass
+        java-17-openjdk
+        jq
+        python3
+        python3-module-pip
+        git
+        curl
+        wget
+        sudo
+        tree
+      )
+
+      echo "Установка: ${PACKAGES[@]}"
+      apt-get install -y "${PACKAGES[@]}" || {
+        echo "ERROR: Не удалось установить некоторые пакеты"
+        exit 1
+      }
+
+      echo ""
+      echo "--- Проверка установленных версий ---"
+      echo "Ansible: $(ansible --version 2>&1 | head -1)"
+      echo "Python: $(python3 --version 2>&1)"
+      echo "Java: $(java -version 2>&1 | head -1)"
+      echo "JQ: $(jq --version 2>&1)"
+      echo "Git: $(git --version 2>&1)"
+      echo "Unzip: $(unzip -v 2>&1 | head -1)"
+
+      echo ""
+      echo "✓ Все необходимые пакеты успешно установлены"
+      EOFREMOTE
+
+    - echo ""
+
+    # === Подготовка директории на деплой ноде ===
+    - echo "=== Подготовка директории ${CORAX_DIR} на деплой ноде ==="
+    - |
+      ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST} bash << EOFREMOTE
+      set -e
+
+      # Backup старой директории если существует
+      if [ -d "${CORAX_DIR}" ]; then
+        BACKUP_DIR="${CORAX_DIR}.backup.$(date +%Y%m%d_%H%M%S)"
+        echo "WARNING: Директория ${CORAX_DIR} уже существует"
+        echo "Создание резервной копии: \${BACKUP_DIR}"
+        mv ${CORAX_DIR} \${BACKUP_DIR} || {
+          echo "WARNING: Не удалось создать backup, удаляем директорию..."
+          rm -rf ${CORAX_DIR}
+        }
+      fi
+
+      # Создание родительской директории
+      mkdir -p $(dirname ${CORAX_DIR})
+      echo "✓ Родительская директория подготовлена"
+      EOFREMOTE
+
+    - echo ""
+
+    # === Копирование архива на деплой ноду ===
+    - echo "=== Копирование архива ${CORAX_ARCHIVE} на деплой ноду ==="
+    - echo "Источник - ${DISTRIBS_DIR}/${CORAX_ARCHIVE}"
+    - echo "Назначение - ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:/tmp/${CORAX_ARCHIVE}"
+    - echo ""
+    - |
+      echo "Копирование архива..."
+      scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+        ${DISTRIBS_DIR}/${CORAX_ARCHIVE} \
+        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:/tmp/${CORAX_ARCHIVE}
+
+      echo ""
+      echo "✓ Архив скопирован на деплой ноду"
+    - echo ""
+
+    # === Распаковка архива на деплой ноде ===
+    - echo "=== Распаковка архива на деплой ноде ==="
+    - |
+      ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST} bash << EOFREMOTE
+      set -e
+
+      echo "Распаковка /tmp/${CORAX_ARCHIVE}..."
+      cd $(dirname ${CORAX_DIR})
+
+      # Распаковка архива
+      unzip -q /tmp/${CORAX_ARCHIVE}
+
+      # Проверка что архив создал директорию corax_prepare
+      if [ ! -d "corax_prepare" ]; then
+        echo "✗ ERROR: Архив не создал директорию corax_prepare!"
+        echo "Проверьте структуру архива"
+        exit 1
+      fi
+
+      # Переименование в ${CORAX_DIR}
+      mv corax_prepare $(basename ${CORAX_DIR})
+
+      echo "✓ Архив распакован в ${CORAX_DIR}"
+
+      # Удаление временного архива
+      rm -f /tmp/${CORAX_ARCHIVE}
+      echo "✓ Временный архив удален"
+
+      # Проверка структуры
+      echo ""
+      echo "--- Структура распакованной директории: ---"
+      tree -L 2 ${CORAX_DIR} 2>/dev/null || ls -la ${CORAX_DIR}
+      EOFREMOTE
+
+    - echo ""
+
+    # === Копирование сгенерированных конфигов ===
+    - echo "=== Копирование сгенерированных конфигурационных файлов ==="
+    - echo "Замена конфигов из артефактов CI/CD..."
+    - echo ""
+
+    # Копирование inventory.ini
+    - |
+      echo "Копирование inventory.ini..."
+      scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+        ${RUNNER_WORKDIR}/inventory.ini \
+        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:${CORAX_DIR}/inventory.ini
+      echo "✓ inventory.ini скопирован"
+
+    # Копирование group_vars/all.yaml
+    - |
+      echo "Копирование group_vars/all.yaml..."
+      scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+        ${RUNNER_WORKDIR}/group_vars/all.yaml \
+        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:${CORAX_DIR}/group_vars/all.yaml
+      echo "✓ group_vars/all.yaml скопирован"
+
+    # Копирование ansible.cfg
+    - |
+      echo "Копирование ansible.cfg..."
+      scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+        ${RUNNER_WORKDIR}/ansible.cfg \
+        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:${CORAX_DIR}/ansible.cfg
+      echo "✓ ansible.cfg скопирован"
+
+    # Копирование SSH ключа
+    - |
+      echo "Копирование SSH ключа..."
+      scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+        ${RUNNER_WORKDIR}/ssh_private_key \
+        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:${CORAX_DIR}/ssh_private_key
+      ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST} "chmod 600 ${CORAX_DIR}/ssh_private_key"
+      echo "✓ SSH ключ скопирован"
+
+    - echo ""
+    - echo "✓ Все конфигурационные файлы заменены"
+    - echo ""
+
+    # === Проверка финальной структуры ===
+    - echo "=== Проверка финальной структуры на деплой ноде ==="
+    - |
+      ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST} bash << EOFREMOTE
+      set -e
+      cd ${CORAX_DIR}
+
+      echo "--- Структура директории ${CORAX_DIR}: ---"
+      tree -L 2 . 2>/dev/null || ls -laR | head -80
+
+      echo ""
+      echo "--- Проверка ключевых файлов: ---"
+
+      # Проверка обязательных файлов
+      FILES_TO_CHECK=(
+        "playbook.yaml"
+        "ansible.cfg"
+        "inventory.ini"
+        "group_vars/all.yaml"
+        "ssh_private_key"
+        "files/prepare.sh"
+        "files/prepare_corax.yaml"
+        "files/post_install_corax.yaml"
+      )
+
+      for FILE in "\${FILES_TO_CHECK[@]}"; do
+        if [ -e "\${FILE}" ]; then
+          SIZE=\$(stat -c%s "\${FILE}" 2>/dev/null || stat -f%z "\${FILE}" 2>/dev/null || echo '?')
+          echo "✓ \${FILE} (\${SIZE} bytes)"
+        else
+          echo "✗ WARNING: \${FILE} не найден!"
+        fi
+      done
+
+      echo ""
+      echo "--- Проверка директории files/ (дистрибутивы): ---"
+      if [ -d "files/" ]; then
+        ls -lh files/*.zip 2>/dev/null || echo "WARNING: ZIP файлы не найдены в files/"
+        echo "✓ Директория files/ найдена"
+      else
+        echo "✗ WARNING: Директория files/ не найдена!"
+      fi
+
+      echo ""
+      echo "✓ Проверка завершена"
+      EOFREMOTE
+
+    - echo ""
+
+    # === Настройка SSH доступа к рабочим нодам ===
+    - echo "=== Настройка SSH доступа к рабочим нодам кластера ==="
+    - |
+      ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST} bash << 'EOFREMOTE'
+      set -e
+
+      echo "Настройка SSH ключей..."
+      mkdir -p ~/.ssh
+      chmod 700 ~/.ssh
+
+      # Копирование SSH ключа в домашнюю директорию пользователя
+      cp ${CORAX_DIR}/ssh_private_key ~/.ssh/id_rsa
+      chmod 600 ~/.ssh/id_rsa
+
+      # Генерация публичного ключа из приватного
+      if [ ! -f ~/.ssh/id_rsa.pub ]; then
+        ssh-keygen -y -f ~/.ssh/id_rsa > ~/.ssh/id_rsa.pub
+        chmod 644 ~/.ssh/id_rsa.pub
+      fi
+
+      echo ""
+      echo "=========================================="
+      echo "ПУБЛИЧНЫЙ SSH КЛЮЧ ДЛЯ РАБОЧИХ НОД"
+      echo "=========================================="
+      cat ~/.ssh/id_rsa.pub
+      echo "=========================================="
+      echo ""
+      echo "ВАЖНО: Убедитесь, что этот публичный ключ добавлен в ~/.ssh/authorized_keys"
+      echo "       на всех рабочих нодах кластера Corax!"
+      echo ""
+
+      # Проверка доступа к нодам из inventory
+      echo "--- Проверка доступа к рабочим нодам кластера ---"
+      cd ${CORAX_DIR}
+
+      # Извлечение IP адресов из inventory.ini
+      NODES=$(grep 'ansible_host=' inventory.ini | grep -v '^#' | awk '{print $2}' | cut -d= -f2 | sort -u)
+
+      if [ -z "$NODES" ]; then
+        echo "WARNING: Не найдено нод в inventory.ini для проверки"
+      else
+        echo "Найдено уникальных IP адресов: $(echo "$NODES" | wc -l)"
+        echo ""
+
+        SUCCESS_COUNT=0
+        FAIL_COUNT=0
+
+        for NODE_IP in $NODES; do
+          if [ -n "$NODE_IP" ]; then
+            echo -n "Проверка $NODE_IP... "
+            if timeout 5 ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o ConnectTimeout=5 \
+               root@$NODE_IP "hostname" 2>/dev/null; then
+              echo "✓ OK"
+              SUCCESS_COUNT=$((SUCCESS_COUNT+1))
+            else
+              echo "✗ FAILED"
+              FAIL_COUNT=$((FAIL_COUNT+1))
+              echo "  WARNING: Не удалось подключиться к ноде $NODE_IP"
+              echo "  Убедитесь, что:"
+              echo "    - Нода доступна по сети"
+              echo "    - Публичный ключ добавлен в ~/.ssh/authorized_keys"
+              echo "    - SSH сервис запущен на ноде"
+            fi
+          fi
+        done
+
+        echo ""
+        echo "Результат проверки: успешно $SUCCESS_COUNT, ошибок $FAIL_COUNT"
+
+        if [ $FAIL_COUNT -gt 0 ]; then
+          echo ""
+          echo "WARNING: Обнаружены недоступные ноды!"
+          echo "Настройте SSH доступ перед запуском Ansible playbooks"
+        fi
+      fi
+
+      echo ""
+      echo "✓ SSH настроен"
+      EOFREMOTE
+
+    - echo ""
+
+    # === Проверка готовности окружения для Ansible ===
+    - echo "=== Проверка готовности окружения для Ansible ==="
+    - |
+      ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST} bash << 'EOFREMOTE'
+      set -e
+      cd ${CORAX_DIR}
+
+      echo "--- Проверка Ansible конфигурации ---"
+      export ANSIBLE_CONFIG=${CORAX_DIR}/ansible.cfg
+      ansible --version
+
+      echo ""
+      echo "--- Тестовый запуск Ansible ping ---"
+      ansible all -i inventory.ini -m ping || {
+        echo ""
+        echo "WARNING: Ansible ping не прошел успешно"
+        echo "Это ожидаемо, если SSH ключи еще не распространены на рабочие ноды"
+      }
+
+      echo ""
+      echo "✓ Окружение подготовлено для запуска Ansible playbooks"
+      EOFREMOTE
+
+    - echo ""
+
+    # === Итоговая информация ===
+    - echo "=========================================="
+    - echo "ПОДГОТОВКА ДЕПЛОЙ НОДЫ ЗАВЕРШЕНА"
+    - echo "=========================================="
+    - echo ""
+    - echo "✓ Архив corax_prepare.zip скопирован с runner"
+    - echo "✓ Архив распакован в ${CORAX_DIR}"
+    - echo "✓ Конфигурационные файлы заменены из CI/CD"
+    - echo "✓ SSH ключи настроены"
+    - echo ""
+    - echo "Следующие шаги для развертывания Corax:"
+    - echo ""
+    - echo "1. Подключитесь к деплой ноде:"
+    - echo "   ssh ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}"
+    - echo ""
+    - echo "2. Перейдите в директорию Corax:"
+    - echo "   cd ${CORAX_DIR}"
+    - echo ""
+    - echo "3. Убедитесь, что SSH ключи настроены на всех рабочих нодах"
+    - echo "   (см. публичный ключ в выводе выше)"
+    - echo ""
+    - echo "4. Запустите playbook для подготовки дистрибутивов:"
+    - echo "   ansible-playbook -i inventory.ini playbook.yaml"
+    - echo ""
+    - echo "5. Запустите развертывание компонентов Corax:"
+    - echo "   ansible-playbook -i inventory.ini prepare_corax.yaml"
+    - echo "   ansible-playbook -i inventory.ini playbooks/kafka-zookeeper-SE.yml -t enabled_service"
+    - echo "   ansible-playbook -i inventory.ini playbooks/kafka-zookeeper-SE.yml"
+    - echo "   ansible-playbook -i inventory.ini playbooks/crxsr.yml -t root,install,start"
+    - echo "   ansible-playbook -i inventory.ini playbooks/crxui.yml -t root,install"
+    - echo "   ansible-playbook -i inventory.ini post_install_corax.yaml"
+    - echo ""
+    - echo "=========================================="
+    - echo ""
+
+  when: manual  # Требует ручного подтверждения для безопасности
+
+  only:
+    - branches
