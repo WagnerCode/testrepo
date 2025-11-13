@@ -5,8 +5,7 @@
 
 prepare_deploy_node:
   stage: node_preparation
-  extends:
-    - .node_preparation_template
+  extends: .node_preparation_template
 
   dependencies:
     - generate_configs

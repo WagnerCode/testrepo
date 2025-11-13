@@ -5,8 +5,7 @@
 
 generate_configs:
   stage: config_generation
-  extends:
-    - .config_generation_template
+  extends: .config_generation_template
 
   script:
     - echo "=========================================="
