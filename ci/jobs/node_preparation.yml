@@ -8,15 +8,16 @@ prepare_deploy_node:
   extends:
     - .common_job
 
-  before_script:
-    - !reference [.check_runner_environment, before_script]
-    - !reference [.validate_required_vars, before_script]
-    - !reference [.setup_ssh, before_script]
-
   dependencies:
     - generate_configs
 
   script:
+    # === Выполнение всех проверок ===
+    - !reference [.check_runner_environment, before_script]
+    - !reference [.validate_required_vars, before_script]
+    - !reference [.setup_ssh, before_script]
+
+    # === Основная работа джобы ===
     - echo "=========================================="
     - echo "ПОДГОТОВКА ДЕПЛОЙ НОДЫ"
     - echo "=========================================="
