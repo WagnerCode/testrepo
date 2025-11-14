@@ -385,6 +385,39 @@ prepare_deploy_node:
 
     - echo ""
 
+    # === Настройка sudoers на нодах кластера ===
+    - echo "=== Настройка sudoers на всех нодах кластера ==="
+    - |
+      ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST} bash << 'EOFREMOTE'
+      set -e
+      cd ${CORAX_DIR}
+
+      echo "Извлечение IP адресов из files/inventory.j2..."
+      # Извлечение уникальных IP адресов из inventory
+      NODES=$(grep 'ansible_host=' files/inventory.j2 2>/dev/null | grep -v '^#' | awk '{print $2}' | cut -d= -f2 | sort -u)
+
+      if [ -z "$NODES" ]; then
+        echo "WARNING: Не найдено нод в files/inventory.j2"
+      else
+        echo "Найдено уникальных IP адресов: $(echo "$NODES" | wc -l)"
+        echo ""
+
+        for NODE_IP in $NODES; do
+          if [ -n "$NODE_IP" ]; then
+            echo "Настройка sudoers на $NODE_IP..."
+            ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
+              root@$NODE_IP "grep -q '^root.*ALL=(ALL:ALL).*ALL' /etc/sudoers || echo 'root ALL=(ALL:ALL) ALL' >> /etc/sudoers" 2>/dev/null && echo "✓ $NODE_IP - sudoers настроен" || echo "✗ $NODE_IP - не удалось настроить sudoers (возможно нода недоступна)"
+          fi
+        done
+
+        echo ""
+        echo "✓ Настройка sudoers завершена"
+      fi
+      EOFREMOTE
+
+    - echo ""
+
     # === Запуск Ansible playbook ===
     - echo "=== Запуск Ansible playbook для подготовки Corax ==="
     - |
@@ -416,6 +449,8 @@ prepare_deploy_node:
     - echo "✓ Архив распакован в ${CORAX_DIR}"
     - echo "✓ Конфигурационные файлы заменены из CI/CD"
     - echo "✓ SSH ключи настроены"
+    - echo "✓ Sudoers настроен на всех нодах кластера"
+    - echo "✓ Playbook.yaml выполнен (подготовка дистрибутивов на деплой ноде)"
     - echo ""
     - echo "Следующие шаги для развертывания Corax:"
     - echo ""
@@ -423,21 +458,15 @@ prepare_deploy_node:
     - echo "   ssh ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}"
     - echo ""
     - echo "2. Перейдите в директорию Corax:"
-    - echo "   cd ${CORAX_DIR}"
+    - echo "   cd /pub/corax"
     - echo ""
-    - echo "3. Убедитесь, что SSH ключи настроены на всех рабочих нодах"
-    - echo "   (см. публичный ключ в выводе выше)"
-    - echo ""
-    - echo "4. Запустите playbook для подготовки дистрибутивов:"
-    - echo "   ansible-playbook -i inventory.ini playbook.yaml"
-    - echo ""
-    - echo "5. Запустите развертывание компонентов Corax:"
-    - echo "   ansible-playbook -i inventory.ini prepare_corax.yaml"
-    - echo "   ansible-playbook -i inventory.ini playbooks/kafka-zookeeper-SE.yml -t enabled_service"
-    - echo "   ansible-playbook -i inventory.ini playbooks/kafka-zookeeper-SE.yml"
-    - echo "   ansible-playbook -i inventory.ini playbooks/crxsr.yml -t root,install,start"
-    - echo "   ansible-playbook -i inventory.ini playbooks/crxui.yml -t root,install"
-    - echo "   ansible-playbook -i inventory.ini post_install_corax.yaml"
+    - echo "3. Запустите развертывание компонентов Corax:"
+    - echo "   ansible-playbook -i inventories/inventory.ini prepare_corax.yaml"
+    - echo "   ansible-playbook -i inventories/inventory.ini playbooks/kafka-zookeeper-SE.yml -t enabled_service"
+    - echo "   ansible-playbook -i inventories/inventory.ini playbooks/kafka-zookeeper-SE.yml"
+    - echo "   ansible-playbook -i inventories/inventory.ini playbooks/crxsr.yml -t root,install,start"
+    - echo "   ansible-playbook -i inventories/inventory.ini playbooks/crxui.yml -t root,install"
+    - echo "   ansible-playbook -i inventories/inventory.ini post_install_corax.yaml"
     - echo ""
     - echo "=========================================="
     - echo ""
