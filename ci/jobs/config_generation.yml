@@ -21,8 +21,15 @@ generate_configs:
     - chmod +x ci/scripts/generate_inventory.py
     - python3 ci/scripts/generate_inventory.py > ${RUNNER_WORKDIR}/inventory.ini
     - echo ""
-    - echo "--- Сгенерированный inventory.ini ---"
+    - echo "--- Сгенерированный inventory.ini (полный, для рабочих нод) ---"
     - cat ${RUNNER_WORKDIR}/inventory.ini
+    - echo ""
+    - echo "=== Генерация inventory_deploy.ini ==="
+    - chmod +x ci/scripts/generate_inventory_deploy.py
+    - python3 ci/scripts/generate_inventory_deploy.py > ${RUNNER_WORKDIR}/inventory_deploy.ini
+    - echo ""
+    - echo "--- Сгенерированный inventory_deploy.ini (только деплой нода) ---"
+    - cat ${RUNNER_WORKDIR}/inventory_deploy.ini
     - echo ""
     - echo "=== Генерация group_vars/all.yaml ==="
     - chmod +x ci/scripts/generate_group_vars.sh
