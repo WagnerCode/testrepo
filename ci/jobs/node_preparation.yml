@@ -180,21 +180,21 @@ prepare_deploy_node:
     - echo "Замена конфигов из артефактов CI/CD..."
     - echo ""
 
-    # Копирование inventory.ini
+    # Копирование inventory_deploy.ini → inventory.ini (только деплой нода)
     - |
-      echo "Копирование inventory.ini..."
+      echo "Копирование inventory_deploy.ini → inventory.ini (только деплой нода)..."
       scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
-        ${RUNNER_WORKDIR}/inventory.ini \
+        ${RUNNER_WORKDIR}/inventory_deploy.ini \
         ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:${CORAX_DIR}/inventory.ini
-      echo "✓ inventory.ini скопирован"
+      echo "✓ inventory.ini скопирован (только деплой нода для playbook.yaml)"
 
-    # Копирование inventory.ini в files/inventory.j2
+    # Копирование inventory.ini → files/inventory.j2 (полный inventory для рабочих нод)
     - |
-      echo "Копирование inventory.ini в files/inventory.j2..."
+      echo "Копирование inventory.ini → files/inventory.j2 (полный inventory)..."
       scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
         ${RUNNER_WORKDIR}/inventory.ini \
         ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:${CORAX_DIR}/files/inventory.j2
-      echo "✓ inventory.j2 скопирован в директорию files/"
+      echo "✓ inventory.j2 скопирован в директорию files/ (для рабочих нод кластера)"
 
     # Копирование group_vars/all.yaml
     - |
