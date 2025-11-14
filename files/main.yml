@@ -1,0 +1,74 @@
+crx_sr_user:   "{{ kafka_user  | default('kafka') }}"           # Пользователь ОС
+crx_sr_group:  "{{ kafka_group | default('kafka') }}"           # ГруппаПользователя ОС
+#added 2 lines
+crxsr_user: "{{ kafka_user | default('kafka') }}" # Пользователь ОС
+crxsr_group: "{{ kafka_group | default('kafka') }}" # ГруппаПользователя ОС
+
+
+crxsr:                    # Параметры для установки schema-registry
+  distr:          "{{ kafka.distr      | default ('kafka-patched.zip')}}"    # путь до архива относительно files
+  installdir:     "{{ kafka.installdir | default ('/opt/Apache/kafka')}}"    # абсолютный путь на конечном сервере до приложения ( ОСТОРОЖНО ПРИ УСТАНОВКЕ В ДИРЕКТОРИЮ С РАБОЧЕЙ KAFKA )
+  cleanInstall:    false        # очистка installdir при установке ( ВЫКЛЮЧИТЬ ПРИ УСТАНОВКЕ В ДИРЕКТОРИЮ С РАБОЧЕЙ KAFKA )
+  cleanLog:        false        # очистка logdir при установке
+  configdir: 'config/schemaregistry'           # относительный путь от {{ crxsr.installdir }} на конечном сервере до файлов конфигурации приложения
+  tokendir:  'token'            # относительный путь от {{ crxsr.installdir }} на конечном сервере до логов приложения
+  ssldir:    'ssl'              # относительный путь от {{ crxsr.installdir }} на конечном сервере до контейнеров с сертификатами
+  logdir:    'logs'             # относительный путь от {{ crxsr.installdir }} на конечном сервере до логов приложения
+  bindir:    'bin'              # относительный путь от {{ crxsr.installdir }} на конечном сервере до логов приложения
+  keyStorePath:       "{{ kafka.keyStorePath       | default ('ssl/keystore.jks')}}"   # путь от inventories/_стенд_/
+  keyStorePassword:   "{{ kafka.keyStorePassword   | default ('SeCuRePaSsWorD2')}}"    # пароль от keyStore
+  keyPassword:        "{{ kafka.keyPassword        | default ('SeCuRePaSsWorD2')}}"    # пароль от ключа в хранилище
+  trustStorePath:     "{{ kafka.trustStorePath     | default ('ssl/truststore.jks')}}" # путь от inventories/_стенд_/
+  trustStorePassword: "{{ kafka.trustStorePassword | default ('SeCuRePaSsWorD2')}}"    # пароль от trustStore
+  ssl_endpoint_identification_algorithm: 'all'
+  jmxport: 7020             # порт для подключения по JMX
+  jmx_security_enable: true # включение авторизации для JMX
+  jmx_access_roles:       # переменные для генерации доступов. Если переменная не определена, то текущие доступы не меняются
+    - user: "myuser"
+      access: "readonly"
+      password: "mypassword"
+  sr_user:     # пользователи в schema-registry
+    admin:
+      psw: "SeCuRePaSsWorD2"
+      role: 'ROLE_ADMIN'
+    user:
+      psw: "SeCuRePaSsWorD2"
+      role: 'ROLE_USER'
+  prop_var:                      # Основные переменные:
+    "server_port": 8081
+    "schema_registry_rest_config": 'schema-registry-compatibility-config.properties'
+    "logging_file_name":           '${schema-registry.logs.dir}/schema-registry-server.log'
+    'schema_registry_rest_security_auth_defaults_file': 'schema-registry-users.properties'
+  prop_var_srv_ssl:              # Включаем шифрование и авторизацию в schema-registry
+    'server_ssl_enabled':           'true'
+    'server_ssl_protocol':          'TLS'
+    'server_ssl_enabled_protocols': 'TLSv1.2'
+    'server_ssl_ciphers':           'TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256'
+    'server_ssl_client_auth':       'need'                # включаем авторизацию на сервере
+    'keyStorePath':                 "{{ kafka.keyStorePath       | default ('ssl/keystore.jks')}}"    # путь от inventories/_стенд_/
+    'keyStorePassword':             "{{ kafka.keyStorePassword   | default ('SeCuRePaSsWorD2')}}"     # пароль от хранилища
+    'keyPassword':                  "{{ kafka.keyPassword        | default ('SeCuRePaSsWorD2')}}"     # пароль от ключа в хранилище
+    'trustStorePath':               "{{ kafka.trustStorePath     | default ('ssl/truststore.jks')}}"  # путь от inventories/_стенд_/
+    'trustStorePassword':           "{{ kafka.trustStorePassword | default ('SeCuRePaSsWorD2')}}"     # пароль от хранилища trustStore
+#################################################
+# Для подключения CRXSR к Кафке по SSL используются переменные из роли kafka или заполняем в инвентори:
+# kafka:
+#  security_protocol: ''
+#  trustStorePath: ''
+#  trustStorePassword: ''
+#  keyStorePath: ''
+#  keyStorePassword: ''
+#  keyPassword: ''
+#  ssl_endpoint_identification_algorithm: ''
+#  ssl_cipher_suites: ''
+#  ssl_client_auth: ''
+#  ssl_enabled_potocols: ''
+# При использование профиля с аудитом включаются параметры:
+#  audit:
+#    url: 'http://url_to_audit'
+#    metamodel: ''
+#    event: ''
+#    keyStorePath: ''
+#    trustStorePath: ''
+#    keyStorePassword: ''
+#    trustStorePassword: ''

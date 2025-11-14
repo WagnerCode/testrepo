@@ -57,6 +57,14 @@
         - "{{ zookeeper.datadir }}"
         - "{{ kafka.installdir}}/bin"
 
+    - name: Change owner of password-encrypt-cli jar file
+      ansible.builtin.file:
+        path: /tmp/password-encrypt-cli-2.4.0.jar
+        owner: kafka
+        group: kafka
+        state: file
+    
+
     - name: Change fcontext selinux for bin directory
       community.general.sefcontext:
         target: "{{ kafka.installdir }}/bin(/.*)?"
