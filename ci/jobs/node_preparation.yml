@@ -188,6 +188,14 @@ prepare_deploy_node:
         ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:${CORAX_DIR}/inventory.ini
       echo "✓ inventory.ini скопирован"
 
+    # Копирование inventory.ini в files/inventory.j2
+    - |
+      echo "Копирование inventory.ini в files/inventory.j2..."
+      scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+        ${RUNNER_WORKDIR}/inventory.ini \
+        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:${CORAX_DIR}/files/inventory.j2
+      echo "✓ inventory.j2 скопирован в директорию files/"
+
     # Копирование group_vars/all.yaml
     - |
       echo "Копирование group_vars/all.yaml..."
