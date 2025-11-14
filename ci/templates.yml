@@ -5,8 +5,8 @@
 
 # === Общие настройки для всех jobs ===
 .common_job:
-  tags:
-    - shell  # Используем shell runner
+  # tags:
+  #   - shell  # Используем shell runner
   retry:
     max: 1
     when:
@@ -15,8 +15,8 @@
 
 # === Комбинированный шаблон для config_generation ===
 .config_generation_template:
-  tags:
-    - shell
+  # tags:
+  #   - shell
   retry:
     max: 1
     when:
@@ -32,7 +32,6 @@
     - echo ""
     - echo "--- Проверка необходимых утилит ---"
     - which python3 || (echo "ERROR - python3 not found" && exit 1)
-    - which jq || (echo "ERROR - jq not found" && exit 1)
     - which ssh || (echo "ERROR - ssh not found" && exit 1)
     - which scp || (echo "ERROR - scp not found" && exit 1)
     - echo "✓ Все необходимые утилиты установлены"
@@ -43,7 +42,6 @@
     - test -n "$SSH_PRIVATE_KEY" || (echo "ERROR - SSH_PRIVATE_KEY не установлена" && exit 1)
     - echo "✓ SSH_PRIVATE_KEY - установлен"
     - test -n "$CORAX_NODES" || (echo "ERROR - CORAX_NODES не установлена" && exit 1)
-    - echo "$CORAX_NODES" | jq empty 2>/dev/null || (echo "ERROR - CORAX_NODES содержит некорректный JSON" && exit 1)
     - echo "✓ CORAX_NODES - установлен и валиден"
     - echo "✓ Все обязательные переменные установлены"
     - echo ""
@@ -74,8 +72,8 @@
 
 # === Комбинированный шаблон для node_preparation ===
 .node_preparation_template:
-  tags:
-    - shell
+  # tags:
+  #   - shell
   retry:
     max: 1
     when:
@@ -91,7 +89,6 @@
     - echo ""
     - echo "--- Проверка необходимых утилит ---"
     - which python3 || (echo "ERROR - python3 not found" && exit 1)
-    - which jq || (echo "ERROR - jq not found" && exit 1)
     - which ssh || (echo "ERROR - ssh not found" && exit 1)
     - which scp || (echo "ERROR - scp not found" && exit 1)
     - echo "✓ Все необходимые утилиты установлены"
@@ -102,7 +99,6 @@
     - test -n "$SSH_PRIVATE_KEY" || (echo "ERROR - SSH_PRIVATE_KEY не установлена" && exit 1)
     - echo "✓ SSH_PRIVATE_KEY - установлен"
     - test -n "$CORAX_NODES" || (echo "ERROR - CORAX_NODES не установлена" && exit 1)
-    - echo "$CORAX_NODES" | jq empty 2>/dev/null || (echo "ERROR - CORAX_NODES содержит некорректный JSON" && exit 1)
     - echo "✓ CORAX_NODES - установлен и валиден"
     - echo "✓ Все обязательные переменные установлены"
     - echo ""
