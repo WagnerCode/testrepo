@@ -27,7 +27,7 @@ variables:
   # === Пути на GitLab Runner ===
 
   # Директория с дистрибутивами на runner (shell executor)
-  DISTRIBS_DIR: "/distribs"
+  DISTRIBS_DIR: "/test-distribs"
 
   # Имя архива с подготовленной структурой Corax
   CORAX_ARCHIVE: "corax_prepare.zip"
