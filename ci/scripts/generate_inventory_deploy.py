@@ -11,7 +11,7 @@ def generate_deploy_inventory(deploy_host, deploy_user):
 
     inventory_content = [
         "[deploy]",
-        f"deploy-node    ansible_host={deploy_host}    ansible_user={deploy_user}    ansible_connection=local",
+        f"localhost    ansible_connection=local",
         "",
         "[all:vars]",
         "ansible_python_interpreter=/usr/bin/python3",
