@@ -145,9 +145,11 @@ prepare_deploy_node:
         ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST} bash << EOFREMOTE
       set -e
 
-      echo "Распаковка /tmp/${CORAX_ARCHIVE}..."
-      cd $(dirname ${CORAX_DIR})
+      echo "Распаковка /tmp/${CORAX_ARCHIVE} в ${CORAX_DIR}..."
 
+      # Создание родительской директории для распаковки
+      mkdir -p $(dirname ${CORAX_DIR})
+      cd $(dirname ${CORAX_DIR})
 
       # Распаковка архива
       unzip -q /tmp/${CORAX_ARCHIVE}
@@ -158,9 +160,6 @@ prepare_deploy_node:
         echo "Проверьте структуру архива"
         exit 1
       fi
-
-      # Переименование в ${CORAX_DIR}
-      mv corax_prepare $(basename ${CORAX_DIR})
 
       echo "✓ Архив распакован в ${CORAX_DIR}"
 
@@ -356,17 +355,17 @@ prepare_deploy_node:
     - echo "=== Проверка готовности окружения для Ansible ==="
     - |
       ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
-        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST} bash << 'EOFREMOTE'
+        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST} bash << EOFREMOTE
       set -e
       cd ${CORAX_DIR}
 
       echo "--- Проверка Ansible конфигурации ---"
-      export ANSIBLE_CONFIG=${CORAX_DIR}/ansible.cfg
+      export ANSIBLE_CONFIG=./ansible.cfg
       ansible --version
 
       echo ""
       echo "--- Тестовый запуск Ansible ping ---"
-      ansible all -i ${CORAX_DIR}/inventory.ini -m ping || {
+      ansible all -i inventory.ini -m ping || {
         echo ""
         echo "WARNING: Ansible ping не прошел успешно"
         echo "Это ожидаемо, если SSH ключи еще не распространены на рабочие ноды"
@@ -374,6 +373,28 @@ prepare_deploy_node:
 
       echo ""
       echo "✓ Окружение подготовлено для запуска Ansible playbooks"
+      EOFREMOTE
+
+    - echo ""
+
+    # === Запуск Ansible playbook ===
+    - echo "=== Запуск Ansible playbook для подготовки Corax ==="
+    - |
+      ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST} bash << EOFREMOTE
+      set -e
+      cd ${CORAX_DIR}
+
+      echo "Переход в директорию ${CORAX_DIR}"
+      echo "Текущая директория: \$(pwd)"
+      echo ""
+
+      echo "--- Запуск ansible-playbook ---"
+      export ANSIBLE_CONFIG=./ansible.cfg
+      ansible-playbook -i inventory.ini playbook.yaml
+
+      echo ""
+      echo "✓ Ansible playbook успешно выполнен"
       EOFREMOTE
 
     - echo ""

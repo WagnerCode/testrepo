@@ -14,8 +14,8 @@ variables:
   KAFKA_INSTALL_DIR: "/pub/opt/Apache/kafka"
   KAFKA_DATA_DIR: "/pub/KAFKADATA"
   ZOOKEEPER_DATA_DIR: "/pub/zookeeper"
-  CORAX_DIR: "/pub/corax"
-  TMP_DIR: "/pub/corax/tmp"
+  CORAX_DIR: "/corax/corax_prepare"
+  TMP_DIR: "/corax/corax_prepare/tmp"
 
   # Порты сервисов
   CRXUI_PORT: "9090"
