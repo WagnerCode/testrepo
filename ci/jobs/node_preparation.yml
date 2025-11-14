@@ -440,9 +440,56 @@ prepare_deploy_node:
 
     - echo ""
 
+    # === Запуск развертывания компонентов Corax ===
+    - echo "=== Запуск развертывания компонентов Corax ==="
+    - |
+      ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST} bash << EOFREMOTE
+      set -e
+      cd /pub/corax
+
+      echo "Переход в директорию /pub/corax"
+      echo "Текущая директория: \$(pwd)"
+      echo ""
+
+      echo "--- 1/6: Запуск prepare_corax.yaml ---"
+      ansible-playbook -i inventories/inventory.ini prepare_corax.yaml
+      echo "✓ prepare_corax.yaml завершен"
+      echo ""
+
+      echo "--- 2/6: Запуск kafka-zookeeper-SE.yml (enabled_service) ---"
+      ansible-playbook -i inventories/inventory.ini playbooks/kafka-zookeeper-SE.yml -t enabled_service
+      echo "✓ kafka-zookeeper-SE.yml (enabled_service) завершен"
+      echo ""
+
+      echo "--- 3/6: Запуск kafka-zookeeper-SE.yml ---"
+      ansible-playbook -i inventories/inventory.ini playbooks/kafka-zookeeper-SE.yml
+      echo "✓ kafka-zookeeper-SE.yml завершен"
+      echo ""
+
+      echo "--- 4/6: Запуск crxsr.yml ---"
+      ansible-playbook -i inventories/inventory.ini playbooks/crxsr.yml -t root,install,start
+      echo "✓ crxsr.yml завершен"
+      echo ""
+
+      echo "--- 5/6: Запуск crxui.yml ---"
+      ansible-playbook -i inventories/inventory.ini playbooks/crxui.yml -t root,install
+      echo "✓ crxui.yml завершен"
+      echo ""
+
+      echo "--- 6/6: Запуск post_install_corax.yaml ---"
+      ansible-playbook -i inventories/inventory.ini post_install_corax.yaml
+      echo "✓ post_install_corax.yaml завершен"
+      echo ""
+
+      echo "✓ Все playbook'и развертывания Corax успешно выполнены!"
+      EOFREMOTE
+
+    - echo ""
+
     # === Итоговая информация ===
     - echo "=========================================="
-    - echo "ПОДГОТОВКА ДЕПЛОЙ НОДЫ ЗАВЕРШЕНА"
+    - echo "РАЗВЕРТЫВАНИЕ КЛАСТЕРА CORAX ЗАВЕРШЕНО"
     - echo "=========================================="
     - echo ""
     - echo "✓ Архив corax_prepare.zip скопирован с runner"
@@ -450,23 +497,19 @@ prepare_deploy_node:
     - echo "✓ Конфигурационные файлы заменены из CI/CD"
     - echo "✓ SSH ключи настроены"
     - echo "✓ Sudoers настроен на всех нодах кластера"
-    - echo "✓ Playbook.yaml выполнен (подготовка дистрибутивов на деплой ноде)"
+    - echo "✓ Playbook.yaml выполнен (подготовка дистрибутивов)"
+    - echo "✓ prepare_corax.yaml выполнен"
+    - echo "✓ kafka-zookeeper-SE.yml выполнен (enabled_service + полная установка)"
+    - echo "✓ crxsr.yml выполнен (установка и запуск)"
+    - echo "✓ crxui.yml выполнен (установка)"
+    - echo "✓ post_install_corax.yaml выполнен"
     - echo ""
-    - echo "Следующие шаги для развертывания Corax:"
+    - echo "Кластер Corax успешно развернут!"
     - echo ""
-    - echo "1. Подключитесь к деплой ноде:"
+    - echo "Для проверки состояния сервисов:"
     - echo "   ssh ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}"
-    - echo ""
-    - echo "2. Перейдите в директорию Corax:"
     - echo "   cd /pub/corax"
-    - echo ""
-    - echo "3. Запустите развертывание компонентов Corax:"
-    - echo "   ansible-playbook -i inventories/inventory.ini prepare_corax.yaml"
-    - echo "   ansible-playbook -i inventories/inventory.ini playbooks/kafka-zookeeper-SE.yml -t enabled_service"
-    - echo "   ansible-playbook -i inventories/inventory.ini playbooks/kafka-zookeeper-SE.yml"
-    - echo "   ansible-playbook -i inventories/inventory.ini playbooks/crxsr.yml -t root,install,start"
-    - echo "   ansible-playbook -i inventories/inventory.ini playbooks/crxui.yml -t root,install"
-    - echo "   ansible-playbook -i inventories/inventory.ini post_install_corax.yaml"
+    - echo "   ansible -i inventories/inventory.ini all -m shell -a 'systemctl status kafka'"
     - echo ""
     - echo "=========================================="
     - echo ""
