@@ -2,7 +2,7 @@
   hosts: all
   become: yes
   vars:
-    KFK_distrib: KFK-11.340.0-16-distrib.zip
+    KFK_distrib: KFK-12.381.1-16-distrib.zip
     corax_scriptmanager: corax-scriptMerger-2.0.0.zip
     json_exporter: ansible_corax_json_exporter.zip
     tmp_dir: /pub/corax/tmp/
@@ -29,7 +29,7 @@
           - sshpass
           - java-17-openjdk
           - jq
-        state: latest
+        state: present
 
     - name: "Create corax dir - {{ tmp_dir }}"
       ansible.builtin.file:
@@ -73,6 +73,23 @@
       ansible.builtin.template:
         src: ./files/inventory.j2
         dest: "{{ corax_dir }}/inventories/inventory.ini"
+
+### insert files into kafka disto
+    - name: Change ansible.cfg in corax_dir
+      ansible.builtin.copy:
+        src: ./files/ansible.cfg
+        dest: "{{ corax_dir }}/ansible.cfg"
+
+    - name: Change create_enc.yml in corax_dir/helper
+      ansible.builtin.copy:
+        src: ./files/create_enc.yml
+        dest: "{{ corax_dir }}/helper/create_enc.yml"
+
+    - name: Change main.yml in crxsr
+      ansible.builtin.copy:
+        src: ./files/main.yml
+        dest: "{{ corax_dir }}/roles/crxsr/defaults/main.yml"
+### insert files into kafka disto   
 
     - name: Create prepare_corax.yaml playbook
       ansible.builtin.copy:

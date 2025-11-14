@@ -1,0 +1,41 @@
+##########################################################
+# Копирует библиотеку password-encrypt-cli-2.4.0.jar на сервера в /tmp/
+# Создает файл(config/encrypt.pass) для шифрования паролей
+# Регистрирует переменную register_security_encoding_key_path,
+# которая подставляется в конфигурацию
+# и encrypt_key для шифрования паролей
+##########################################################
+- block:
+  - name: "Копируем библиотеку с управляющего на остальные сервера"
+    become: yes
+    become_user: "{{ becomeuser | default (kafka_user) }}"
+    copy:
+      src: "../files/{{ password_encoder_cli_path }}"
+      dest: "/tmp/{{ password_encoder_cli_path }}"
+      mode: 0777
+      owner: "{{ kafka_user }}" ##
+      group: "{{ kafka_group | default(kafka_user) }}" ##
+
+  - name: "Регистрируем переменную encrypt_key"
+    run_once: true
+    set_fact:
+      encrypt_key: "{{ lookup('pipe', 'echo ApacheKafkaSecure | base64') }}"
+
+  - name: "Регистрируем переменную security_encoding_key_path"
+    run_once: true
+    set_fact:
+      security_encoding_key_path: "{{ hostvars[inventory_hostname][role_name].installdir }}/config/encrypt.pass"
+
+  - name: "Проверка файла на существование security_encoding_key_path"
+    stat:
+      path: "{{ security_encoding_key_path }}"
+    register: register_security_encoding_key_path
+
+  - name: "Создаем файл с переменной encrypt_key, если его нет"
+    become: yes
+    become_user: "{{ becomeuser | default (kafka_user) }}"
+    copy:
+      dest: "{{ security_encoding_key_path }}"
+      content: "{{ encrypt_key }}"
+      mode: 0400
+    when: not register_security_encoding_key_path.stat.exists
