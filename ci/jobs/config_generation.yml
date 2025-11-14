@@ -45,9 +45,6 @@ generate_configs:
     - chmod +x ci/scripts/generate_manifest.sh
     - bash ci/scripts/generate_manifest.sh ${RUNNER_WORKDIR}
     - echo ""
-    - echo "--- Манифест конфигурации ---"
-    - cat ${RUNNER_WORKDIR}/config_manifest.json | jq .
-    - echo ""
     - echo "=========================================="
     - echo "ГЕНЕРАЦИЯ ЗАВЕРШЕНА"
     - echo "=========================================="
