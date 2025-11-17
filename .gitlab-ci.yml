@@ -47,14 +47,6 @@
 # Переменные для ручного запуска pipeline
 workflow:
   rules:
-    - if: $CI_PIPELINE_SOURCE == "web"
-      variables:
-        CLUSTER_SECURITY_MODE:
-          value: "plaintext"
-          description: "Режим безопасности кластера"
-          options:
-            - "plaintext"
-            - "ssl"
     - when: always
 
 # Включение модулей конфигурации
