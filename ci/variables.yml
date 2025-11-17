@@ -41,11 +41,16 @@ variables:
   ANSIBLE_FORCE_COLOR: "True"
   ANSIBLE_STDOUT_CALLBACK: "yaml"
 
-  # === Выбор варианта конфигурации кластера ===
+  # === Режим безопасности кластера ===
 
-  # Выбор варианта конфигурации кластера
-  # Возможные значения: "standard", "alternative", "custom"
-  # - standard: Стандартная конфигурация для production (wait_for_start: 20)
-  # - alternative: Альтернативная конфигурация с увеличенными таймаутами (wait_for_start: 30)
-  # - custom: Кастомная конфигурация для отладки (wait_for_start: 60, cleanLog/cleanData: true)
-  CLUSTER_CONFIG_VARIANT: "standard"
+  # Режим безопасности кластера
+  # Возможные значения: "plaintext" или "ssl"
+  # - plaintext: Без шифрования (для dev/test окружений)
+  # - ssl: С полным шифрованием и сертификатами (для production)
+  CLUSTER_SECURITY_MODE: "plaintext"
+
+  # Пароли для SSL сертификатов (используются только при CLUSTER_SECURITY_MODE=ssl)
+  # ВАЖНО: В production используйте GitLab CI/CD Variables с типом "Masked" для безопасного хранения!
+  SSL_KEYSTORE_PASSWORD: "changeit"
+  SSL_TRUSTSTORE_PASSWORD: "changeit"
+  SSL_KEY_PASSWORD: "changeit"
