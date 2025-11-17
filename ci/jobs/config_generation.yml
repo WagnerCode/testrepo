@@ -15,6 +15,9 @@ generate_configs:
     - echo "=== Валидация варианта конфигурации кластера ==="
     - bash ci/scripts/validate_config_variant.sh
     - echo ""
+    - echo "=== Валидация режима безопасности ==="
+    - bash ci/scripts/validate_security_mode.sh
+    - echo ""
     - echo "=== Подготовка директории для конфигов ==="
     - rm -rf ${RUNNER_WORKDIR}
     - mkdir -p ${RUNNER_WORKDIR}
@@ -55,6 +58,9 @@ generate_configs:
     - chmod +x ci/scripts/generate_manifest.sh
     - bash ci/scripts/generate_manifest.sh ${RUNNER_WORKDIR}
     - echo ""
+    - echo "=== Подготовка конфигурации безопасности ==="
+    - bash ci/scripts/prepare_security_config.sh
+    - echo ""
     - echo "=========================================="
     - echo "ГЕНЕРАЦИЯ ЗАВЕРШЕНА"
     - echo "=========================================="
@@ -62,7 +68,11 @@ generate_configs:
     - echo "Сгенерированные конфигурационные файлы:"
     - ls -lh ${RUNNER_WORKDIR}/
     - echo ""
+    - echo "Конфигурация безопасности:"
+    - ls -lh ${RUNNER_WORKDIR}/security_config/
+    - echo ""
     - echo "✓ Конфиги готовы для развертывания"
+    - echo "✓ Режим безопасности: ${CLUSTER_SECURITY_MODE}"
     - echo ""
 
   artifacts:

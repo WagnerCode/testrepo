@@ -49,9 +49,15 @@ workflow:
   rules:
     - if: $CI_PIPELINE_SOURCE == "web"
       variables:
+        CLUSTER_SECURITY_MODE:
+          value: "plaintext"
+          description: "Режим безопасности кластера"
+          options:
+            - "plaintext"
+            - "ssl"
         CLUSTER_CONFIG_VARIANT:
           value: "standard"
-          description: "Выберите вариант конфигурации кластера"
+          description: "Вариант конфигурации кластера"
           options:
             - "standard"
             - "alternative"

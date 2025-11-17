@@ -1,0 +1,68 @@
+tmp_dir: /tmp/installer
+wait_for_start: 120  # Увеличено для SSL инициализации
+customJavaPath: false
+security: SSL__ZK_mTLS_WITH_AUTH__KAFKA_SSL_WITH_AUTH
+kafka_user: kafka
+kafka_group: kafka
+zookeeper_user: kafka
+zookeeper_group: kafka
+enabled_service: true
+
+kafka:
+    distr: distrib.zip
+    installdir: /pub/opt/Apache/kafka
+    logdir: /pub/opt/Apache/kafka/logs
+    datadir: /pub/KAFKADATA
+    cleanLog: true
+    cleanData: true
+    trustStorePath: "/pub/opt/Apache/kafka/ssl/kafka.truststore.jks"
+    trustStorePassword: "changeit"
+    keyStorePath: "/pub/opt/Apache/kafka/ssl/kafka.keystore.jks"
+    keyStorePassword: "changeit"
+    keyPassword: "changeit"
+
+zookeeper:
+    distr: distrib.zip
+    installdir: /pub/opt/Apache/kafka
+    logdir: /pub/opt/Apache/kafka/logs
+    datadir: /pub/zookeeper
+    cleanLog: true
+    cleanData: false
+    trustStorePath: "/pub/opt/Apache/kafka/ssl/kafka.truststore.jks"
+    trustStorePassword: "changeit"
+    keyStorePath: "/pub/opt/Apache/kafka/ssl/kafka.keystore.jks"
+    keyStorePassword: "changeit"
+
+crxsr:
+  distr: distrib.zip
+  installdir: /pub/opt/Apache/kafka
+  cleanLog: false
+  prop_var:
+    "server_port": 8081
+  sr_user:
+    admin:
+      psw: "admin"
+      role: 'ROLE_ADMIN'
+    user:
+      psw: "user"
+      role: 'ROLE_USER'
+
+crxui:
+    distr: distrib.zip
+    installdir: /pub/opt/Apache/kafka
+    cleanLog: false
+    cleanData: false
+    server.port: 9090
+  ui_user:
+    admin:
+      psw: "admin"
+      role: 'ROLE_ADMIN'
+    user:
+      psw: "user"
+      role: 'ROLE_USER'
+    viewer:
+      psw: "viewer"
+      role: 'ROLE_VIEWER'
+    developer:
+      psw: "developer"
+      role: 'ROLE_DEVELOPER'

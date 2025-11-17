@@ -20,6 +20,7 @@ prepare_deploy_node:
     - echo "Целевая директория - ${CORAX_DIR}"
     - echo "Архив - ${DISTRIBS_DIR}/${CORAX_ARCHIVE}"
     - echo "Вариант конфигурации кластера - ${CLUSTER_CONFIG_VARIANT}"
+    - echo "Режим безопасности - ${CLUSTER_SECURITY_MODE}"
     - echo ""
 
     # === Проверка SSH доступа ===
@@ -225,6 +226,45 @@ prepare_deploy_node:
 
     - echo ""
     - echo "✓ Все конфигурационные файлы заменены"
+    - echo ""
+
+    # === Копирование конфигурации безопасности ==="
+    - echo "=== Применение конфигурации безопасности (${CLUSTER_SECURITY_MODE}) ==="
+    - |
+      # Копирование конфигурации безопасности в files/
+      echo "Копирование конфигурации режима ${CLUSTER_SECURITY_MODE}..."
+      scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+        ${RUNNER_WORKDIR}/security_config/group_vars_security.yaml \
+        ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:${CORAX_DIR}/files/group_vars_all.j2
+      echo "✓ Конфигурация безопасности скопирована"
+
+    # === Копирование SSL сертификатов (если SSL режим) ===
+    - |
+      if [ "${CLUSTER_SECURITY_MODE}" == "ssl" ]; then
+        echo ""
+        echo "=== Копирование SSL сертификатов на деплой ноду ==="
+
+        # Копируем сертификаты в директорию files/ для дальнейшего развертывания
+        scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+          ${RUNNER_WORKDIR}/security_config/ssl/kafka.keystore.jks \
+          ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:${CORAX_DIR}/files/
+
+        scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+          ${RUNNER_WORKDIR}/security_config/ssl/kafka.truststore.jks \
+          ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:${CORAX_DIR}/files/
+
+        echo "✓ SSL сертификаты скопированы"
+        echo ""
+        echo "Создание директории для SSL сертификатов на рабочих нодах..."
+
+        # Создание директории для SSL на деплой ноде
+        ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+          ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST} \
+          "mkdir -p ${CORAX_DIR}/ssl_certs"
+
+        echo "✓ Директория для SSL сертификатов создана"
+      fi
+
     - echo ""
 
     # === Проверка финальной структуры ===
