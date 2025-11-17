@@ -33,14 +33,30 @@
 #   - KAFKA_INSTALL_DIR, KAFKA_DATA_DIR, ZOOKEEPER_DATA_DIR
 #   - CRXUI_PORT, CRXSR_PORT, KFK_VERSION
 #   - DISTRIBS_DIR: Директория с дистрибутивами на runner (default: /distribs)
+#   - CLUSTER_CONFIG_VARIANT: Вариант конфигурации кластера (default: standard)
+#     Возможные значения: standard, alternative, custom
 #
 # Runner requirements:
 #   - Executor: shell
 #   - Утилиты: python3, jq, ssh, scp
 #   - Дистрибутивы Corax в директории /distribs (или кастомной DISTRIBS_DIR)
 #
-# Документация: см. GITLAB_SETUP.md
+# Документация: см. GITLAB_SETUP.md и CONFIG_VARIANTS.md
 # ============================================================================
+
+# Переменные для ручного запуска pipeline
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "web"
+      variables:
+        CLUSTER_CONFIG_VARIANT:
+          value: "standard"
+          description: "Выберите вариант конфигурации кластера"
+          options:
+            - "standard"
+            - "alternative"
+            - "custom"
+    - when: always
 
 # Включение модулей конфигурации
 include:
