@@ -7,8 +7,6 @@
     json_exporter: ansible_corax_json_exporter.zip
     tmp_dir: /pub/corax/tmp/
     corax_dir: /pub/corax
-    # Добавлена переменная для выбора варианта конфигурации кластера
-    config_variant: "{{ lookup('env', 'CLUSTER_CONFIG_VARIANT') | default('standard') }}"
   tasks:
 
     - name: Set hostname
@@ -66,19 +64,10 @@
         mode: '0755'
         recurse: true
 
-    - name: Debug - показать выбранный вариант конфигурации
-      ansible.builtin.debug:
-        msg: "Используется вариант конфигурации кластера: {{ config_variant }}"
-
-    - name: Create group_vars - выбор варианта конфигурации
+    - name: Create group_vars
       ansible.builtin.template:
-        src: "{{ item }}"
+        src: ./files/group_vars_all.j2
         dest: "{{ corax_dir }}/inventories/group_vars/all.yaml"
-      with_first_found:
-        - files:
-          - "./files/group_vars_all_{{ config_variant }}.j2"
-          - "./files/group_vars_all.j2"
-          errors: 'ignore'
 
     - name: Create template for inventory file
       ansible.builtin.template:

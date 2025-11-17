@@ -41,15 +41,6 @@ variables:
   ANSIBLE_FORCE_COLOR: "True"
   ANSIBLE_STDOUT_CALLBACK: "yaml"
 
-  # === Выбор варианта конфигурации кластера ===
-
-  # Выбор варианта конфигурации кластера
-  # Возможные значения: "standard", "alternative", "custom"
-  # - standard: Стандартная конфигурация для production (wait_for_start: 20)
-  # - alternative: Альтернативная конфигурация с увеличенными таймаутами (wait_for_start: 30)
-  # - custom: Кастомная конфигурация для отладки (wait_for_start: 60, cleanLog/cleanData: true)
-  CLUSTER_CONFIG_VARIANT: "standard"
-
   # === Режим безопасности кластера ===
 
   # Режим безопасности кластера

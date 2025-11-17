@@ -19,7 +19,6 @@ prepare_deploy_node:
     - echo "Пользователь - ${DEPLOY_NODE_USER}"
     - echo "Целевая директория - ${CORAX_DIR}"
     - echo "Архив - ${DISTRIBS_DIR}/${CORAX_ARCHIVE}"
-    - echo "Вариант конфигурации кластера - ${CLUSTER_CONFIG_VARIANT}"
     - echo "Режим безопасности - ${CLUSTER_SECURITY_MODE}"
     - echo ""
 
@@ -471,17 +470,12 @@ prepare_deploy_node:
       echo "Текущая директория: \$(pwd)"
       echo ""
 
-      # Экспортируем переменную для Ansible
-      export CLUSTER_CONFIG_VARIANT="${CLUSTER_CONFIG_VARIANT}"
-      echo "Используется вариант конфигурации: \${CLUSTER_CONFIG_VARIANT}"
-      echo ""
-
       echo "--- Запуск ansible-playbook ---"
       export ANSIBLE_CONFIG=./ansible.cfg
       ansible-playbook -i inventory.ini playbook.yaml
 
       echo ""
-      echo "✓ Ansible playbook успешно выполнен с вариантом: \${CLUSTER_CONFIG_VARIANT}"
+      echo "✓ Ansible playbook успешно выполнен"
       EOFREMOTE
 
     - echo ""

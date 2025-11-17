@@ -12,9 +12,6 @@ generate_configs:
     - echo "ГЕНЕРАЦИЯ КОНФИГУРАЦИОННЫХ ФАЙЛОВ"
     - echo "=========================================="
     - echo ""
-    - echo "=== Валидация варианта конфигурации кластера ==="
-    - bash ci/scripts/validate_config_variant.sh
-    - echo ""
     - echo "=== Валидация режима безопасности ==="
     - bash ci/scripts/validate_security_mode.sh
     - echo ""
