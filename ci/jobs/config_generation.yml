@@ -69,7 +69,7 @@ generate_configs:
     - ls -lh ${RUNNER_WORKDIR}/security_config/
     - echo ""
     - echo "✓ Конфиги готовы для развертывания"
-    - echo "✓ Режим безопасности: ${CLUSTER_SECURITY_MODE}"
+    - 'echo "✓ Режим безопасности: ${CLUSTER_SECURITY_MODE}"'
     - echo ""
 
   artifacts:
