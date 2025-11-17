@@ -101,6 +101,40 @@
         src: ./files/post_install_corax.yaml
         dest: "{{ corax_dir }}/post_install_corax.yaml"
 
+    # SSL Certificates deployment (only when certificates exist)
+    - name: Check if SSL certificates exist
+      ansible.builtin.stat:
+        path: "./files/kafka.keystore.jks"
+      register: ssl_keystore_check
+      delegate_to: localhost
+
+    - name: Create SSL directory on target nodes
+      ansible.builtin.file:
+        path: "/pub/opt/Apache/kafka/ssl"
+        state: directory
+        mode: '0755'
+        owner: kafka
+        group: kafka
+      when: ssl_keystore_check.stat.exists
+
+    - name: Copy SSL keystore to target nodes
+      ansible.builtin.copy:
+        src: "./files/kafka.keystore.jks"
+        dest: "/pub/opt/Apache/kafka/ssl/kafka.keystore.jks"
+        mode: '0644'
+        owner: kafka
+        group: kafka
+      when: ssl_keystore_check.stat.exists
+
+    - name: Copy SSL truststore to target nodes
+      ansible.builtin.copy:
+        src: "./files/kafka.truststore.jks"
+        dest: "/pub/opt/Apache/kafka/ssl/kafka.truststore.jks"
+        mode: '0644'
+        owner: kafka
+        group: kafka
+      when: ssl_keystore_check.stat.exists
+
     - name: "Remove {{ tmp_dir }}"
       ansible.builtin.file:
         path: "{{ tmp_dir }}"

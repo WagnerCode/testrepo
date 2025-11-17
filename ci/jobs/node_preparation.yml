@@ -252,16 +252,8 @@ prepare_deploy_node:
           ${RUNNER_WORKDIR}/security_config/ssl/kafka.truststore.jks \
           ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST}:${CORAX_DIR}/files/
 
-        echo "✓ SSL сертификаты скопированы"
-        echo ""
-        echo "Создание директории для SSL сертификатов на рабочих нодах..."
-
-        # Создание директории для SSL на деплой ноде
-        ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
-          ${DEPLOY_NODE_USER}@${DEPLOY_NODE_HOST} \
-          "mkdir -p ${CORAX_DIR}/ssl_certs"
-
-        echo "✓ Директория для SSL сертификатов создана"
+        echo "✓ SSL сертификаты скопированы в ${CORAX_DIR}/files/"
+        echo "   (будут развернуты на рабочих нодах через playbook.yaml)"
       fi
 
     - echo ""
