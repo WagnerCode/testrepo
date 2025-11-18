@@ -24,7 +24,7 @@
    - Установлен GitLab Runner в режиме shell
    - Доступ к интернету (опционально, для обновлений)
    - Установлены необходимые утилиты: `python3`, `jq`, `ssh`, `scp`
-   - Директория `/distribs` для размещения дистрибутивов Corax
+   - Директория `/test-distribs` для размещения дистрибутивов Corax
 
 2. **Деплой нода** - сервер с ALT Linux 10.2, с которого будет производиться развертывание
    - Минимум 2 CPU, 4GB RAM, 20GB диск
@@ -39,62 +39,10 @@
 
 ---
 
-## Настройка GitLab Runner
-
-### Проверка GitLab Runner
-
-Убедитесь, что GitLab Runner установлен и работает в режиме shell:
-
-```bash
-# Проверка статуса runner
-sudo gitlab-runner status
-
-# Просмотр конфигурации
-sudo cat /etc/gitlab-runner/config.toml
-```
-
-В конфигурации должно быть указано `executor = "shell"`:
-
-```toml
-[[runners]]
-  name = "my-shell-runner"
-  url = "https://gitlab.example.com/"
-  token = "..."
-  executor = "shell"
-  [runners.custom_build_dir]
-  [runners.cache]
-```
-
-### Установка необходимых утилит на Runner
-
-На машине с GitLab Runner должны быть установлены следующие утилиты:
-
-```bash
-# Для Debian/Ubuntu
-sudo apt-get update
-sudo apt-get install -y python3 python3-pip jq openssh-client rsync unzip tree
-
-# Для RHEL/CentOS
-sudo yum install -y python3 python3-pip jq openssh-clients rsync unzip tree
-
 # Для ALT Linux через apt-get
 sudo apt-get update
 sudo apt-get install -y python3 python3-module-pip jq openssh-clients rsync unzip tree
 ```
-
-Проверка установленных утилит:
-
-```bash
-python3 --version  # Python 3.x
-jq --version       # jq-1.x
-ssh -V             # OpenSSH_x.x
-scp -V             # OpenSSH_x.x
-rsync --version    # rsync version 3.x
-unzip -v           # UnZip 6.x
-tree --version     # tree v1.x (опционально для красивого вывода)
-```
-
----
 
 ## Подготовка архива Corax на Runner
 
@@ -103,9 +51,9 @@ tree --version     # tree v1.x (опционально для красивого
 На машине с GitLab Runner создайте директорию для хранения архива Corax:
 
 ```bash
-sudo mkdir -p /distribs
-sudo chown gitlab-runner:gitlab-runner /distribs
-sudo chmod 755 /distribs
+sudo mkdir -p /test-distribs
+sudo chown gitlab-runner:gitlab-runner /test-distribs
+sudo chmod 755 /test-distribs
 ```
 
 **Примечание:** Если пользователь, от имени которого запускается runner, отличается от `gitlab-runner`, замените его на актуальное имя.
@@ -160,15 +108,15 @@ zip -r corax_prepare.zip corax_prepare/
 
 ### Размещение архива на Runner
 
-Скопируйте архив `corax_prepare.zip` в директорию `/distribs` на runner:
+Скопируйте архив `corax_prepare.zip` в директорию `/test-distribs` на runner:
 
 ```bash
 # Копирование с локальной машины
-scp corax_prepare.zip gitlab-runner@runner-host:/distribs/
+scp corax_prepare.zip gitlab-runner@runner-host:/test-distribs/
 
 # Или через wget, если архив доступен по URL
 ssh gitlab-runner@runner-host
-cd /distribs
+cd /test-distribs
 wget https://example.com/path/to/corax_prepare.zip
 ```
 
@@ -176,7 +124,7 @@ wget https://example.com/path/to/corax_prepare.zip
 
 ```bash
 ssh gitlab-runner@runner-host
-ls -lh /distribs/
+ls -lh /test-distribs/
 ```
 
 Ожидаемый вывод:
@@ -189,13 +137,13 @@ total 500M
 Проверьте целостность архива:
 
 ```bash
-unzip -t /distribs/corax_prepare.zip
+unzip -t /test-distribs/corax_prepare.zip
 ```
 
 Просмотрите содержимое архива:
 
 ```bash
-unzip -l /distribs/corax_prepare.zip | head -30
+unzip -l /test-distribs/corax_prepare.zip | head -30
 ```
 
 **Важно:**
@@ -292,7 +240,7 @@ unzip -l /distribs/corax_prepare.zip | head -30
 
 #### Путь к дистрибутивам на Runner
 
-- `DISTRIBS_DIR` - по умолчанию: `/distribs`
+- `DISTRIBS_DIR` - по умолчанию: `/test-distribs`
 
 Если дистрибутивы размещены в другой директории на runner, укажите её в этой переменной.
 
@@ -386,7 +334,7 @@ Pipeline разбит на модули для удобства модифика
 
 **Автоматический запуск**
 
-- Проверяет наличие архива `corax_prepare.zip` в `/distribs` на runner
+- Проверяет наличие архива `corax_prepare.zip` в `/test-distribs` на runner
 - Распаковывает архив во временную рабочую директорию
 - Генерирует `inventory.ini` из переменной `CORAX_NODES`
 - Генерирует `group_vars/all.yaml` с параметрами компонентов из GitLab CI/CD переменных
@@ -462,54 +410,6 @@ Pipeline разбит на модули для удобства модифика
 ]
 ```
 
-### Расширенная конфигурация (выделенные ноды для компонентов)
-
-```json
-[
-  {
-    "name": "zk1",
-    "host": "10.10.11.51",
-    "user": "root",
-    "roles": ["zookeeper"]
-  },
-  {
-    "name": "zk2",
-    "host": "10.10.11.52",
-    "user": "root",
-    "roles": ["zookeeper"]
-  },
-  {
-    "name": "zk3",
-    "host": "10.10.11.53",
-    "user": "root",
-    "roles": ["zookeeper"]
-  },
-  {
-    "name": "kafka1",
-    "host": "10.10.11.61",
-    "user": "root",
-    "roles": ["kafka"]
-  },
-  {
-    "name": "kafka2",
-    "host": "10.10.11.62",
-    "user": "root",
-    "roles": ["kafka"]
-  },
-  {
-    "name": "kafka3",
-    "host": "10.10.11.63",
-    "user": "root",
-    "roles": ["kafka"]
-  },
-  {
-    "name": "corax-services",
-    "host": "10.10.11.70",
-    "user": "root",
-    "roles": ["crxsr", "crxui"]
-  }
-]
-```
 
 ---
 
@@ -519,7 +419,7 @@ Pipeline разбит на модули для удобства модифика
 
 Убедитесь, что:
 - ✓ GitLab Runner работает в режиме shell
-- ✓ Архив `corax_prepare.zip` размещен в `/distribs` на runner
+- ✓ Архив `corax_prepare.zip` размещен в `/test-distribs` на runner
 - ✓ Архив содержит все необходимые файлы и дистрибутивы в структуре `corax_prepare/`
 - ✓ Необходимые утилиты установлены на runner (python3, jq, ssh, scp, rsync, unzip)
 - ✓ Все GitLab CI/CD переменные настроены
@@ -558,184 +458,7 @@ Pipeline автоматически выполнит stage генерации к
 2. В правой части нажмите **Browse** или **Download**
 3. Просмотрите содержимое директории `generated_configs/`
 
-### 5. После успешного выполнения Pipeline
 
-Подключитесь к деплой ноде и запустите развертывание Corax:
-
-```bash
-# Подключение к деплой ноде
-ssh root@10.10.11.41
-
-# Переход в директорию Corax
-cd /pub/corax
-
-# Проверка структуры
-ls -la
-
-# Шаг 1: Подготовка дистрибутивов
-ansible-playbook -i inventories/inventory.ini playbook.yaml
-
-# Шаг 2: Подготовка окружения Corax
-ansible-playbook -i inventories/inventory.ini prepare_corax.yaml
-
-# Шаг 3: Развертывание Kafka и Zookeeper
-ansible-playbook -i inventories/inventory.ini playbooks/kafka-zookeeper-SE.yml -t enabled_service
-ansible-playbook -i inventories/inventory.ini playbooks/kafka-zookeeper-SE.yml
-
-# Шаг 4: Развертывание Corax Schema Registry
-ansible-playbook -i inventories/inventory.ini playbooks/crxsr.yml -t root,install,start
-
-# Шаг 5: Развертывание Corax UI
-ansible-playbook -i inventories/inventory.ini playbooks/crxui.yml -t root,install
-
-# Шаг 6: Пост-установочная конфигурация
-ansible-playbook -i inventories/inventory.ini post_install_corax.yaml
-```
-
----
-
-## Troubleshooting
-
-### Ошибка: "python3 not found" на runner
-
-**Проблема:** На runner не установлен Python 3.
-
-**Решение:**
-```bash
-# Установка на runner
-ssh gitlab-runner@runner-host
-sudo apt-get install -y python3 python3-pip
-```
-
-### Ошибка: "Directory /distribs does not exist"
-
-**Проблема:** Директория с дистрибутивами не найдена на runner.
-
-**Решение:**
-```bash
-ssh gitlab-runner@runner-host
-sudo mkdir -p /distribs
-sudo chown gitlab-runner:gitlab-runner /distribs
-# Скопируйте дистрибутивы в /distribs
-```
-
-### Ошибка: "SSH connection failed"
-
-**Проблема:** Pipeline не может подключиться к деплой ноде.
-
-**Решение:**
-1. Проверьте корректность IP адреса в `DEPLOY_NODE_HOST`
-2. Убедитесь, что публичный ключ добавлен в `~/.ssh/authorized_keys` на деплой ноде
-3. Проверьте SSH сервис: `systemctl status sshd`
-4. Проверьте firewall
-5. Попробуйте подключиться вручную с runner:
-   ```bash
-   ssh gitlab-runner@runner-host
-   ssh -i ~/.ssh/id_rsa root@<DEPLOY_NODE_HOST>
-   ```
-
-### Ошибка: "apt-get update failed" на деплой ноде
-
-**Проблема:** Не удается обновить список пакетов на ALT Linux.
-
-**Решение:**
-1. Проверьте настройки репозиториев на деплой ноде
-2. Убедитесь, что нода имеет доступ к интернету или внутренним репозиториям
-3. Проверьте DNS
-4. Попробуйте вручную: `ssh root@<DEPLOY_NODE_HOST> "apt-get update -v"`
-
-### Ошибка: "Package not found"
-
-**Проблема:** Не найден пакет (например, `java-17-openjdk`).
-
-**Решение:**
-1. Проверьте версию ALT Linux: `cat /etc/altlinux-release`
-2. Для ALT Linux 10.2 проверьте доступные пакеты: `apt-cache search openjdk`
-3. Обновите список пакетов в `ci/jobs/node_preparation.yml`, если необходимо
-
-### Ошибка: "Ansible ping failed"
-
-**Проблема:** Ansible не может подключиться к рабочим нодам кластера.
-
-**Решение:**
-1. Убедитесь, что публичный ключ распространен на все рабочие ноды
-2. Проверьте inventory: `cat /pub/corax/inventories/inventory.ini`
-3. Проверьте подключение вручную с деплой ноды:
-   ```bash
-   ssh root@<DEPLOY_NODE_HOST>
-   ssh -i ~/.ssh/id_rsa root@<WORKER_NODE_IP>
-   ```
-4. Проверьте формат переменной `CORAX_NODES` - должен быть валидный JSON
-
-### Ошибка: "Invalid JSON in CORAX_NODES"
-
-**Проблема:** Некорректный формат переменной CORAX_NODES.
-
-**Решение:**
-1. Проверьте JSON на валидность: https://jsonlint.com/
-2. Убедитесь, что все кавычки правильные (используйте `"`, не `'`)
-3. Убедитесь, что нет лишних запятых
-4. Пример корректного формата см. в разделе [Примеры конфигурации](#примеры-конфигурации)
-
-### Ошибка: "Corax archive not found"
-
-**Проблема:** Архив `corax_prepare.zip` не найден в `/distribs` на runner.
-
-**Решение:**
-1. Проверьте наличие архива:
-   ```bash
-   ssh gitlab-runner@runner-host
-   ls -lh /distribs/
-   ```
-2. Убедитесь, что файл называется `corax_prepare.zip` (или обновите переменную `CORAX_ARCHIVE`)
-3. Скопируйте архив на runner:
-   ```bash
-   scp corax_prepare.zip gitlab-runner@runner-host:/distribs/
-   ```
-4. Проверьте целостность архива:
-   ```bash
-   unzip -t /distribs/corax_prepare.zip
-   ```
-5. Если используется другая директория, установите переменную `DISTRIBS_DIR` в GitLab
-
-### Ошибка: "Archive is corrupted"
-
-**Проблема:** Архив поврежден или имеет неверный формат.
-
-**Решение:**
-1. Проверьте целостность архива локально перед загрузкой:
-   ```bash
-   unzip -t corax_prepare.zip
-   ```
-2. Пересоздайте архив:
-   ```bash
-   cd /path/to/parent
-   zip -r corax_prepare.zip corax_prepare/
-   ```
-3. Используйте SCP с опцией `-p` для сохранения атрибутов:
-   ```bash
-   scp -p corax_prepare.zip gitlab-runner@runner-host:/distribs/
-   ```
-
-### Ошибка: "Files missing in archive"
-
-**Проблема:** Отсутствуют ожидаемые файлы в архиве (playbook.yaml, files/, и т.д.).
-
-**Решение:**
-1. Просмотрите содержимое архива:
-   ```bash
-   unzip -l /distribs/corax_prepare.zip
-   ```
-2. Убедитесь, что архив создан с правильной структурой (с директорией `corax_prepare/`)
-3. Проверьте наличие обязательных файлов:
-   - `playbook.yaml`
-   - `ansible.cfg`
-   - `files/KFK-*.zip`
-   - `files/corax-scriptMerger-*.zip`
-   - `files/ansible_corax_json_exporter.zip`
-   - `files/prepare.sh`
-   - `files/prepare_corax.yaml`
-   - `files/post_install_corax.yaml`
 
 ### Модификация Pipeline
 
@@ -746,24 +469,3 @@ sudo chown gitlab-runner:gitlab-runner /distribs
 - **Изменить логику генерации конфигов:** `ci/jobs/config_generation.yml`
 - **Изменить логику подготовки ноды:** `ci/jobs/node_preparation.yml`
 - **Добавить переиспользуемые шаблоны:** `ci/templates.yml`
-
-После изменения закоммитьте и запушьте в репозиторий.
-
----
-
-## Дополнительные ресурсы
-
-- [Документация GitLab Runner](https://docs.gitlab.com/runner/)
-- [Документация GitLab CI/CD](https://docs.gitlab.com/ee/ci/)
-- [Документация ALT Linux](https://www.altlinux.org/)
-- [Документация Ansible](https://docs.ansible.com/)
-- [Apache Kafka Documentation](https://kafka.apache.org/documentation/)
-
----
-
-**Версия документа:** 3.0
-**Дата обновления:** 2025-01-12
-**Целевая платформа:** ALT Linux 10.2
-**Версия Corax:** KFK 11.340.0-16
-**Runner executor:** shell
-**Структура деплоя:** Unified archive (`corax_prepare.zip`)

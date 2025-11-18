@@ -64,7 +64,7 @@
         mode: '0755'
         recurse: true
 
-    - name: Create group_vars
+    - name: Create group_vars #NOW ONLY FOR SINGLE INSTANCE
       ansible.builtin.template:
         src: ./files/group_vars_all.j2
         dest: "{{ corax_dir }}/inventories/group_vars/all.yaml"
@@ -83,12 +83,12 @@
     - name: Change create_enc.yml in corax_dir/helper
       ansible.builtin.copy:
         src: ./files/create_enc.yml
-        dest: "{{ corax_dir }}/helper/create_enc.yml"
+        dest: "{{ corax_dir }}/helper/create_enc.yaml"
 
     - name: Change main.yml in crxsr
       ansible.builtin.copy:
         src: ./files/main.yml
-        dest: "{{ corax_dir }}/roles/crxsr/defaults/main.yml"
+        dest: "{{ corax_dir }}/roles/crxsr/defaults/main.yaml"
 ### insert files into kafka disto   
 
     - name: Create prepare_corax.yaml playbook
@@ -100,8 +100,6 @@
       ansible.builtin.copy:
         src: ./files/post_install_corax.yaml
         dest: "{{ corax_dir }}/post_install_corax.yaml"
-
-    # SSL Certificates deployment (only when certificates exist)
     - name: Check if SSL certificates exist
       ansible.builtin.stat:
         path: "./files/kafka.keystore.jks"
@@ -110,7 +108,7 @@
 
     - name: Create SSL directory on target nodes
       ansible.builtin.file:
-        path: "/pub/opt/Apache/kafka/ssl"
+        path: "/pub/corax/inventories/pub/opt/Apache/kafka/ssl/"
         state: directory
         mode: '0755'
         owner: kafka
@@ -120,7 +118,7 @@
     - name: Copy SSL keystore to target nodes
       ansible.builtin.copy:
         src: "./files/kafka.keystore.jks"
-        dest: "/pub/opt/Apache/kafka/ssl/kafka.keystore.jks"
+        dest: "/pub/corax/inventories/pub/opt/Apache/kafka/ssl/kafka.keystore.jks"
         mode: '0644'
         owner: kafka
         group: kafka
@@ -129,11 +127,35 @@
     - name: Copy SSL truststore to target nodes
       ansible.builtin.copy:
         src: "./files/kafka.truststore.jks"
-        dest: "/pub/opt/Apache/kafka/ssl/kafka.truststore.jks"
+        dest: "/pub/corax/inventories/pub/opt/Apache/kafka/ssl/kafka.truststore.jks"
         mode: '0644'
         owner: kafka
         group: kafka
       when: ssl_keystore_check.stat.exists
+#
+    - name: Change zookeeper_SSL
+      ansible.builtin.copy:
+        src: ./files/zookeeper_SSL.yml
+        dest: "{{ corax_dir }}/roles/zookeeper/tasks/zookeeper_SSL.yml"
+      when: ssl_keystore_check.stat.exists
+#
+    - name: Copy kafka_SSL
+      ansible.builtin.copy:
+        src: ./files/kafka_SSL.yml
+        dest: "{{ corax_dir }}/roles/kafka/tasks/kafka_SSL.yml"
+      when: ssl_keystore_check.stat.exists
+#roles/crxsr/defaults/main.yml
+    - name: Copy crxui main.yml
+      ansible.builtin.copy:
+        src: ./files/crxui_main.yml
+        dest: "{{ corax_dir }}/roles/crxui/tasks/main.yml"
+      when: ssl_keystore_check.stat.exists      
+
+    - name: Change main.yml in crxsr
+      ansible.builtin.copy:
+        src: ./files/main.yml
+        dest: "{{ corax_dir }}/roles/crxsr/defaults/main.yml"
+      when: ssl_keystore_check.stat.exists  
 
     - name: "Remove {{ tmp_dir }}"
       ansible.builtin.file:
